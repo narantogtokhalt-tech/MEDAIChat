@@ -1,43 +1,29 @@
-import { addDays, endOfDay, isWithinInterval, startOfDay } from "date-fns";
+// src/lib/atoms.ts
+"use client";
+
 import { atom } from "jotai";
 import type { DateRange } from "react-day-picker";
-import { averageTicketsCreated } from "@/data/average-tickets-created";
+import { parseISO, isWithinInterval } from "date-fns";
 import type { TicketMetric } from "@/types/types";
 
-const defaultStartDate = new Date(2023, 11, 18);
+// 1) Backend-аас орж ирсэн бүх timeline
+export const rawTicketDataAtom = atom<TicketMetric[]>([]);
 
-export const dateRangeAtom = atom<DateRange | undefined>({
-  from: defaultStartDate,
-  to: addDays(defaultStartDate, 6),
-});
+// 2) Default → undefined биш, 2025 эхлэх range
+export const dateRangeAtom = atom<DateRange | undefined>(undefined);
 
+// 3) Range-аар шүүгдсэн chart дата
 export const ticketChartDataAtom = atom((get) => {
-  const dateRange = get(dateRangeAtom);
+  const range = get(dateRangeAtom);
+  const data = get(rawTicketDataAtom);
 
-  if (!dateRange?.from || !dateRange?.to) return [];
+  if (!range?.from || !range?.to) return data;
 
-  const startDate = startOfDay(dateRange.from);
-  const endDate = endOfDay(dateRange.to);
-
-  return averageTicketsCreated
-    .filter((item) => {
-      const [year, month, day] = item.date.split("-").map(Number);
-      const date = new Date(year, month - 1, day);
-      return isWithinInterval(date, { start: startDate, end: endDate });
-    })
-    .flatMap((item) => {
-      const res: TicketMetric[] = [
-        {
-          date: item.date,
-          type: "resolved",
-          count: item.resolved,
-        },
-        {
-          date: item.date,
-          type: "created",
-          count: item.created,
-        },
-      ];
-      return res;
+  return data.filter((item) => {
+    const d = parseISO(item.date);
+    return isWithinInterval(d, {
+      start: range.from as Date,
+      end: range.to as Date,
     });
+  });
 });

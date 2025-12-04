@@ -2,59 +2,76 @@
 
 import { VChart } from "@visactor/react-vchart";
 import type { ICirclePackingChartSpec } from "@visactor/vchart";
-import { convertions } from "@/data/convertions";
+import type { Conversion } from "@/data/convertions";
 import { addThousandsSeparator } from "@/lib/utils";
 
-const spec: ICirclePackingChartSpec = {
+const buildSpec = (values: Conversion[]): ICirclePackingChartSpec => ({
   data: [
     {
       id: "data",
-      values: convertions,
+      values,
     },
   ],
   type: "circlePacking",
   categoryField: "name",
   valueField: "value",
-  drill: true,
+  drill: false,
   padding: 0,
   layoutPadding: 5,
+
+  /** ---------------------------
+   *  LABEL: БUBBLE ДООР ТОО ГАРГАНА
+   * --------------------------- */
   label: {
+    visible: true,
     style: {
       fill: "white",
-      stroke: false,
-      visible: (d) => d.depth === 0,
-      text: (d) => addThousandsSeparator(d.value),
-      fontSize: (d) => d.radius / 2,
-      dy: (d) => d.radius / 8,
+      fontWeight: 400,
+      textAlign: "center",
+      textBaseline: "middle",
+      /**
+       * Багтахгүй жижиг бол текстийг нуух
+       */
+      visible: (d: any) => d.radius > 30,
+
+      /**
+       * Текст → зөвхөн value-г мян. тн хэлбэрээр
+       * Хэрвээ нэртэй харагдуулмаар бол:
+       * `${d.name}\n${value}`
+       */
+      text: (d: any) => {
+        if (!d.value) return "";
+        const v = addThousandsSeparator(Math.round(d.value));
+        return `${v}`;
+      },
+
+      /**
+       * Bubble-ийн radius-оос хамаарч font томруулах
+       */
+      fontSize: (d: any) => Math.max(10, d.radius / 3),
     },
   },
-  legends: [
-    {
-      visible: true,
-      orient: "top",
-      position: "start",
-      padding: 0,
-    },
-  ],
+
+  legends: [{ visible: false }],
+
   tooltip: {
     trigger: ["click", "hover"],
     mark: {
       content: {
-        value: (d) => addThousandsSeparator(d?.value),
+        value: (d: any) =>
+          `${d?.name}: ${addThousandsSeparator(
+            Math.round(d?.value ?? 0),
+          )} мян. тн`,
       },
     },
   },
-  animationEnter: {
-    easing: "cubicInOut",
-  },
-  animationExit: {
-    easing: "cubicInOut",
-  },
-  animationUpdate: {
-    easing: "cubicInOut",
-  },
-};
 
-export default function Chart() {
+  animationEnter: { easing: "cubicInOut" },
+  animationExit: { easing: "cubicInOut" },
+  animationUpdate: { easing: "cubicInOut" },
+});
+
+export default function Chart({ data }: { data: Conversion[] }) {
+  const spec = buildSpec(data);
   return <VChart spec={spec} />;
 }

@@ -1,4 +1,4 @@
-import { Gauge, type LucideIcon, MessagesSquare } from "lucide-react";
+import { Gauge, type LucideIcon, MessagesSquare, Table } from "lucide-react";
 
 export type SiteConfig = typeof siteConfig;
 export type Navigation = {
@@ -8,19 +8,24 @@ export type Navigation = {
 };
 
 export const siteConfig = {
-  title: "VisActor Next Template",
-  description: "Template for VisActor and Next.js",
+  title: "Эдийн засаг, хөгжлийн яам",
+  description: "Дотоод мэдээллийн сан",
 };
 
 export const navigations: Navigation[] = [
   {
     icon: Gauge,
-    name: "Dashboard",
+    name: "Эхлэл",
     href: "/",
   },
   {
     icon: MessagesSquare,
-    name: "Ticket",
+    name: "Power BI",
     href: "/ticket",
+  },
+  {
+    icon: Table,
+    name: "Хүснэгтээр",
+    href: "/table",
   },
 ];

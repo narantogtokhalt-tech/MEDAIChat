@@ -1,7 +1,7 @@
 "use client";
 
 import { format, parseISO } from "date-fns";
-import { useAtom } from "jotai";
+import { useAtom, useAtomValue } from "jotai";
 import { Calendar as CalendarIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -10,30 +10,29 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { averageTicketsCreated } from "@/data/average-tickets-created";
-import { dateRangeAtom } from "@/lib/atoms";
+import { dateRangeAtom, rawTicketDataAtom } from "@/lib/atoms";
 import { cn } from "@/lib/utils";
 
 export function DatePickerWithRange({
   className,
 }: React.HTMLAttributes<HTMLDivElement>) {
   const [dateRange, setDateRange] = useAtom(dateRangeAtom);
+  const data = useAtomValue(rawTicketDataAtom);
 
-  const firstAvailableDate = averageTicketsCreated.reduce(
-    (minDate, current) => {
-      const currentDate = parseISO(current.date);
-      return currentDate < minDate ? currentDate : minDate;
-    },
-    parseISO(averageTicketsCreated[0].date),
-  );
+  // backend-с дата ачаалахаас өмнө хоосон байж болно
+  const firstAvailableDate =
+    data.length > 0
+      ? data
+          .map((d) => parseISO(d.date))
+          .reduce((min, curr) => (curr < min ? curr : min))
+      : new Date();
 
-  const lastAvailableDate = averageTicketsCreated.reduce(
-    (maxDate, current) => {
-      const currentDate = parseISO(current.date);
-      return currentDate > maxDate ? currentDate : maxDate;
-    },
-    parseISO(averageTicketsCreated[averageTicketsCreated.length - 1].date),
-  );
+  const lastAvailableDate =
+    data.length > 0
+      ? data
+          .map((d) => parseISO(d.date))
+          .reduce((max, curr) => (curr > max ? curr : max))
+      : new Date();
 
   return (
     <div className={cn("grid gap-2", className)}>
@@ -66,7 +65,7 @@ export function DatePickerWithRange({
           <Calendar
             initialFocus
             mode="range"
-            defaultMonth={dateRange?.from}
+            defaultMonth={dateRange?.from ?? firstAvailableDate}
             selected={dateRange}
             onSelect={setDateRange}
             numberOfMonths={2}

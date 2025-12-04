@@ -1,0 +1,6 @@
+[
+  { "id": 1, "name": "Нийт экспорт", "href": "/export" },
+  { "id": 2, "name": "Нийт импорт", "href": "/import" },
+  { "id": 3, "name": "Гадаад худалдаа /улсаар/", "href": "/trade-country" },
+  { "id": 4, "name": "Гадаад худалдаа /бүтээгдэхүүнээр/", "href": "/trade-product" }
+]
