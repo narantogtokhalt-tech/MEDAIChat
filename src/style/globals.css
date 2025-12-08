@@ -1,7 +1,8 @@
+@import "./dot-matrix.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-@import "./dot-matrix.css";
 
 @layer base {
   :root {

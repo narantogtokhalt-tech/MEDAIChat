@@ -5,12 +5,6 @@ const nextConfig = {
   // React-ийн strict mode (зөвлөмжит тохиргоо)
   reactStrictMode: true,
 
-  // Build дээр ESLint алдаа гаргаад зогсоохгүй байлгах
-  // (одоохондоо no-console, any гэх мэтээс болж deploy гацаахгүй)
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
-
   // Redirect-ууд
   async redirects() {
     return [
