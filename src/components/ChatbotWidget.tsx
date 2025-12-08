@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 
 // ========== CONFIG ==========
-const DEFAULT_BACKEND = "http://127.0.0.1:8010";
+const DEFAULT_BACKEND = process.env.NEXT_PUBLIC_CHAT_API_BASE ?? "https://stats-chatbot.onrender.com";
 const DEFAULT_API_KEY = "secret123";
 
 const DEFAULT_SUGGESTIONS = [

@@ -16,7 +16,7 @@ type ImportRow = {
   year: number;
 };
 
-const BASE_API = "http://192.168.0.210:8000";
+const BASE_API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://stats-project-g4mc.onrender.com";
 const YEARS = ["2020", "2021", "2022", "2023", "2024", "2025"];
 const MONTHS = [
   { value: "01", label: "01 сар" },
