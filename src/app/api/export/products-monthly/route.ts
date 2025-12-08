@@ -1,12 +1,12 @@
 // src/app/api/export/products-monthly/route.ts
 import { NextResponse } from "next/server";
 
-const backend = process.env.BACKEND_URL;
+const backend = process.env.NEXT_PUBLIC_API_BASE_URL;
 
 export async function GET() {
   if (!backend) {
     return NextResponse.json(
-      { error: "BACKEND_URL is not set" },
+      { error: "NEXT_PUBLIC_API_BASE_URL is not set" },
       { status: 500 },
     );
   }

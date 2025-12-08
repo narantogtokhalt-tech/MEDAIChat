@@ -1,7 +1,7 @@
 // src/app/api/metrics/route.ts
 import { NextResponse } from "next/server";
 
-const backend = process.env.BACKEND_URL!;
+const backend = process.env.NEXT_PUBLIC_API_BASE_URL!;
 
 // Backend талаас авсан structure:
 //  - /dashboard/export/total  -> { export_this_year, yoy_pct, ... }
