@@ -1,7 +1,7 @@
 // src/app/api/export/products-monthly/route.ts
 import { NextResponse } from "next/server";
 
-const backend = process.env.NEXT_PUBLIC_API_BASE_URL;
+const backend = process.env.NEXT_PUBLIC_CHAT_API_BASE;
 
 export async function GET() {
   if (!backend) {
