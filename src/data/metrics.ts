@@ -10,7 +10,7 @@ export async function getMetrics(): Promise<Metric[]> {
   const backend = process.env.NEXT_PUBLIC_CHAT_API_BASE;
 
   if (!backend) {
-    throw new Error("NEXT_PUBLIC_API_BASE_URL is not set in environment variables");
+    throw new Error("NEXT_PUBLIC_CHAT_API_BASE is not set in environment variables");
   }
 
   // FastAPI backend-ээс экспорт / импорт / ханшийн толгой үзүүлэлтүүдийг татна

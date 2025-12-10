@@ -6,7 +6,7 @@ const backend = process.env.NEXT_PUBLIC_CHAT_API_BASE;
 export async function GET() {
   if (!backend) {
     return NextResponse.json(
-      { error: "NEXT_PUBLIC_API_BASE_URL is not set" },
+      { error: "NEXT_PUBLIC_CHAT_API_BASE is not set" },
       { status: 500 },
     );
   }
