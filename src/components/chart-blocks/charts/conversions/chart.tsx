@@ -11,7 +11,10 @@ const buildSpec = (values: Conversion[]): ICirclePackingChartSpec => ({
   data: [
     {
       id: "data",
-      values,
+      values: values.map((v) => ({
+        ...v,
+        value: Number.isFinite(v.value) ? v.value : 0,
+      })),
     },
   ],
   type: "circlePacking",
@@ -30,8 +33,9 @@ const buildSpec = (values: Conversion[]): ICirclePackingChartSpec => ({
       textBaseline: "middle",
       visible: (d: any) => d.radius > 30,
       text: (d: any) => {
-        if (!d.value) return "";
-        const v = addThousandsSeparator(Math.round(Number(d.value) || 0));
+        const n = Number(d.value);
+        if (!Number.isFinite(n) || !n) return "";
+        const v = addThousandsSeparator(Math.round(n));
         return `${v}`;
       },
       fontSize: (d: any) => Math.max(10, d.radius / 3),
@@ -44,10 +48,14 @@ const buildSpec = (values: Conversion[]): ICirclePackingChartSpec => ({
     trigger: ["click", "hover"],
     mark: {
       content: {
-        value: (d: any) =>
-          `${d?.name}: ${addThousandsSeparator(
-            Math.round(Number(d?.value) || 0),
-          )} мян. тн`,
+        value: (d: any) => {
+          const n = Number(d?.value);
+          const v = Number.isFinite(n) ? n : 0;
+          const unit = d?.unit ?? "мян. тн";
+          return `${d?.name}: ${addThousandsSeparator(
+            Math.round(v),
+          )} ${unit}`;
+        },
       },
     },
   },
@@ -59,16 +67,8 @@ const buildSpec = (values: Conversion[]): ICirclePackingChartSpec => ({
 
 export default function Chart({ data }: { data: Conversion[] }) {
   const safeData = Array.isArray(data) ? data : [];
+  if (!safeData.length) return null;
 
-  const spec = useMemo(
-    () => buildSpec(safeData),
-    [safeData], // data өөрчлөгдсөн үед л spec дахин үүснэ
-  );
-
-  if (!safeData.length) {
-    // Хэрвээ өгөгдөл алга бол VChart render хийхгүй байж болно (сонголтоор)
-    return null;
-  }
-
+  const spec = useMemo(() => buildSpec(safeData), [safeData]);
   return <VChart spec={spec} />;
 }

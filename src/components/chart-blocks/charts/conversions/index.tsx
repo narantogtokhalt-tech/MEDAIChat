@@ -10,22 +10,20 @@ import Chart from "./chart";
 
 const backend = process.env.NEXT_PUBLIC_CHAT_API_BASE;
 
-// Backend → Conversion хэлбэр рүү normalize хийх
-function normalizeConversion(raw: any, idx: number): Conversion {
-  return {
-    key: String(raw.key ?? raw.code ?? raw.name ?? idx),
-    name: String(raw.name ?? raw.code ?? `Item ${idx + 1}`),
-    value: Number(
-      raw.value ??
-        raw.qty ??
-        raw.quantity ??
-        raw.total ??
-        raw.total_qty ??
-        0,
-    ),
-    unit: String(raw.unit ?? "мян. тн"),
-  };
-}
+// Backend JSON-ийн хэлбэр
+type BackendCommodity = {
+  key: string;
+  name: string;
+  total_ton: number;
+  total_scaled: number;
+  unit_scaled: string;
+};
+
+type BackendResponse = {
+  from: string;
+  to: string;
+  commodities: BackendCommodity[];
+};
 
 export default function Convertions() {
   const [data, setData] = useState<Conversion[]>([]);
@@ -54,39 +52,22 @@ export default function Convertions() {
           return;
         }
 
-        const json = await res.json();
+        const json: BackendResponse = await res.json();
         console.log("exchange timeline raw json:", json);
 
-        let items: Conversion[] = [];
+        const commodities = json.commodities ?? [];
 
-        // 1) Шууд массив
-        if (Array.isArray(json)) {
-          items = json.map((row, i) => normalizeConversion(row, i));
-        }
-        // 2) { items: [...] }
-        else if (Array.isArray(json.items)) {
-          items = json.items.map((row: any, i: number) =>
-            normalizeConversion(row, i),
-          );
-        }
-        // 3) { data: [...] }
-        else if (Array.isArray(json.data)) {
-          items = json.data.map((row: any, i: number) =>
-            normalizeConversion(row, i),
-          );
-        }
-        // 4) Бусад object хэлбэр → value нь массив/объект байвал бүгдийг хөрвүүлнэ
-        else if (typeof json === "object" && json !== null) {
-          const entries = Object.entries(json);
-          items = entries.map(([key, value], i) =>
-            normalizeConversion(
-              typeof value === "object" && value !== null
-                ? { key, ...value }
-                : { key, value },
-              i,
-            ),
-          );
-        }
+        // Backend → Conversion[] map
+        const items: Conversion[] = commodities.map((c) => ({
+          key: c.key,
+          name: c.name,
+          // total_scaled = хэмжээг scale хийсэн (сая тн / мян. тн)
+          value: Number.isFinite(c.total_scaled)
+            ? c.total_scaled
+            : 0,
+          // unit_scaled = "сая тн", "мян. тн" гэх мэт
+          unit: c.unit_scaled || "мян. тн",
+        }));
 
         setData(items);
       } catch (e) {
@@ -127,12 +108,17 @@ function Indicator({
     return <div className="mt-3 text-muted-foreground/60">Ачаалж байна…</div>;
   }
 
-  // Хэрвээ өгөгдөл олдоогүй бол 0 гэж бичихгүй, зүгээр хоосон орхиод доорх "Мэдээлэл алга."-г л харуулна
   if (!data.length) {
     return null;
   }
 
-  const total = data.reduce((acc, curr) => acc + (curr.value ?? 0), 0);
+  const total = data.reduce(
+    (acc, curr) =>
+      acc + (Number.isFinite(curr.value) ? curr.value : 0),
+    0,
+  );
+
+  // Энд нэгжийг ерөнхийд нь авъя (ихэнх нь "сая тн" байх)
   const unit = data[0]?.unit ?? "мян. тн";
 
   return (
@@ -154,7 +140,10 @@ function Indicator({
           >
             <span>{item.name}</span>
             <span className="tabular-nums">
-              {addThousandsSeparator(item.value)} {item.unit}
+              {addThousandsSeparator(
+                Number.isFinite(item.value) ? item.value : 0,
+              )}{" "}
+              {item.unit}
             </span>
           </li>
         ))}
