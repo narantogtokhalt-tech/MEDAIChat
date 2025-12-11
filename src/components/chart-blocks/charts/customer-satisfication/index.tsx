@@ -18,17 +18,36 @@ type CoalResponse = {
   items: CoalItem[];
 };
 
+// FastAPI backend (Netlify дээр NEXT_PUBLIC_CHAT_API_BASE заавал тохирсон байх)
+const backend = process.env.NEXT_PUBLIC_CHAT_API_BASE;
+
 export default function CustomerSatisfication() {
   const [data, setData] = useState<CoalResponse | null>(null);
 
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetch("/api/coal-cny/latest");
-        if (!res.ok) {
-          console.error("coal-cny/latest backend error");
+        if (!backend) {
+          console.error("NEXT_PUBLIC_CHAT_API_BASE is not set");
           return;
         }
+
+        // Өмнө нь: fetch("/api/coal-cny/latest")
+        // Одоо: шууд backend рүү
+        const res = await fetch(
+          // Эндэх URL-аа FastAPI дээрээ ашиглаж байгаа жинхэнэ endpoint-доо тааруулж солиорой
+          `${backend}/dashboard/sxcoal/coal-cny/latest`,
+          { cache: "no-store" },
+        );
+
+        if (!res.ok) {
+          console.error(
+            "coal-cny/latest backend error",
+            res.status,
+          );
+          return;
+        }
+
         const json: CoalResponse = await res.json();
         setData(json);
       } catch (e) {
@@ -103,8 +122,7 @@ function PriceRow({ item }: { item: CoalItem }) {
         {/* Сүүлийн үнэ */}
         <div className="flex flex-col">
           <span className="text-lg font-semibold">{latestText}</span>
-          <span className="text-[11px] text-muted-foreground">
-          </span>
+          <span className="text-[11px] text-muted-foreground"></span>
         </div>
 
         {/* YoY хувь */}
