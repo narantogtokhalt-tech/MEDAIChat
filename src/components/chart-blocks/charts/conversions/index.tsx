@@ -26,13 +26,13 @@ export default function Convertions() {
         // Өмнө нь: fetch("/api/exchange/commodities")
         // Одоо: шууд backend рүү
         const res = await fetch(
-          `${backend}/dashboard/exchange/commodities`,
+          `${backend}/dashboard/exchange/timeline`,
           { cache: "no-store" },
         );
 
         if (!res.ok) {
           console.error(
-            "Backend error for /dashboard/exchange/commodities",
+            "Backend error for /dashboard/exchange/timeline",
             res.status,
           );
           return;

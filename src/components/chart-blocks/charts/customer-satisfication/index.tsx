@@ -18,7 +18,7 @@ type CoalResponse = {
   items: CoalItem[];
 };
 
-// FastAPI backend (Netlify дээр NEXT_PUBLIC_CHAT_API_BASE заавал тохирсон байх)
+// FastAPI backend
 const backend = process.env.NEXT_PUBLIC_CHAT_API_BASE;
 
 export default function CustomerSatisfication() {
@@ -32,11 +32,9 @@ export default function CustomerSatisfication() {
           return;
         }
 
-        // Өмнө нь: fetch("/api/coal-cny/latest")
-        // Одоо: шууд backend рүү
+        // ✅ ЭНД ЗӨВ ЭНДПОИНТЫГ АШИГЛАНА
         const res = await fetch(
-          // Эндэх URL-аа FastAPI дээрээ ашиглаж байгаа жинхэнэ endpoint-доо тааруулж солиорой
-          `${backend}/dashboard/sxcoal/coal-cny/latest`,
+          `${backend}/dashboard/coal-cny/latest`,
           { cache: "no-store" },
         );
 
@@ -44,6 +42,7 @@ export default function CustomerSatisfication() {
           console.error(
             "coal-cny/latest backend error",
             res.status,
+            res.url,
           );
           return;
         }
