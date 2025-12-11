@@ -1,12 +1,12 @@
 // D:\Projects\visactor-nextjs-template\src\app\(dashboard)\page.tsx
 
+import { Metrics } from "@/components/chart-blocks";
 import {
   AverageTicketsCreated,
   Conversions,
   CustomerSatisfication,
-  Metrics,
   TicketByChannels,
-} from "@/components/chart-blocks";
+} from "@/components/chart-blocks/client";
 import Container from "@/components/container";
 import ChatbotWidget from "@/components/ChatbotWidget";
 
