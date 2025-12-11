@@ -15,6 +15,9 @@ import Chart from "./chart";
 import { DatePickerWithRange } from "./components/date-range-picker";
 import MetricCard from "./components/metric-card";
 
+// FastAPI backend -ийн base URL (Netlify дээр NEXT_PUBLIC_CHAT_API_BASE заавал тохирсон байх ёстой)
+const backend = process.env.NEXT_PUBLIC_CHAT_API_BASE;
+
 const avgValue = (data: TicketMetric[], type: string) => {
   const filtered = data.filter((d) => d.type === type);
   if (filtered.length === 0) return 0;
@@ -32,22 +35,76 @@ export default function AverageTicketsCreated() {
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetch("/api/export/products-monthly");
-        const data: TicketMetric[] = await res.json();
+        if (!backend) {
+          console.error("NEXT_PUBLIC_CHAT_API_BASE is not set");
+          return;
+        }
+
+        // Шууд FastAPI backend рүү дуудах
+        const res = await fetch(
+          `${backend}/dashboard/export/products-timeline`,
+          { cache: "no-store" },
+        );
+
+        if (!res.ok) {
+          console.error(
+            "Backend error for products-timeline",
+            res.status,
+          );
+          return;
+        }
+
+        const data = await res.json();
+        // FastAPI-гаас: { products: [...], monthly: [...] }
+        const monthly: any[] = data.monthly ?? [];
+        const productCodes: string[] =
+          data.products?.map((p: any) => p.code) ?? [
+            "2601",
+            "2603",
+            "2701",
+            "2709",
+          ];
+
+        // TicketMetric[] => { date, type, count }
+        const metrics: TicketMetric[] = [];
+
+        for (const row of monthly) {
+          const period =
+            row.period ??
+            `${row.year}-${String(row.month).padStart(2, "0")}`;
+          const date = `${period}-01`; // "2025-11-01" хэлбэр
+
+          for (const code of productCodes) {
+            const value = row[code];
+            if (value == null) continue;
+
+            const num = Number(value);
+            if (!Number.isFinite(num)) continue;
+
+            const rounded = Math.round(num); // бүхэл тоо болгож хадгална
+
+            metrics.push({
+              date,
+              type: code,
+              count: rounded,
+            });
+          }
+        }
 
         // 1) Бүх timeline-ийг rawTicketDataAtom-д хадгална
-        setRawData(data);
+        setRawData(metrics);
 
-        // 2) Default date range → энэ он
-        if (data.length > 0) {
+        // 2) Default date range → энэ он (metrics дээр)
+        if (metrics.length > 0) {
           const currentYear = new Date().getFullYear();
-          const datesThisYear = data
+          const datesThisYear = metrics
             .map((d) => new Date(d.date))
             .filter((d) => d.getFullYear() === currentYear);
 
-          const targetDates = datesThisYear.length > 0
-            ? datesThisYear
-            : data.map((d) => new Date(d.date)); // хэрэв энэ оных байхгүй бол бүх жил
+          const targetDates =
+            datesThisYear.length > 0
+              ? datesThisYear
+              : metrics.map((d) => new Date(d.date)); // хэрэв энэ оных байхгүй бол бүх жил
 
           if (targetDates.length > 0) {
             const min = new Date(
@@ -80,7 +137,10 @@ export default function AverageTicketsCreated() {
   return (
     <section className="flex h-full flex-col gap-2">
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <ChartTitle title="Экспорт бүтээгдэхүүнээр (сараар)" icon={FilePlus2} />
+        <ChartTitle
+          title="Экспорт бүтээгдэхүүнээр (сараар)"
+          icon={FilePlus2}
+        />
         <DatePickerWithRange />
       </div>
 

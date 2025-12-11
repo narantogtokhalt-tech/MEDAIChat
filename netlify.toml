@@ -5,6 +5,7 @@
 [[plugins]]
   package = "@netlify/plugin-nextjs"
 
+# Энэ redirect-ийг бүр хасчихсан байсан ч болно
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/next"

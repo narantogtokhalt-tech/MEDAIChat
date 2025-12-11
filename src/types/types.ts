@@ -6,6 +6,6 @@ export type IconSvgProps = SVGProps<SVGSVGElement> & {
 
 export type TicketMetric = {
   date: string;
-  type: "created" | "resolved";
+  type: string;      // энд string болгож өргөтгөж байна
   count: number;
 };
