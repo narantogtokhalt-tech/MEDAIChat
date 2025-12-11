@@ -8,15 +8,13 @@ import { addThousandsSeparator } from "@/lib/utils";
 import ChartTitle from "../../components/chart-title";
 import Chart from "./chart";
 
-// FastAPI backend (Netlify дээр NEXT_PUBLIC_CHAT_API_BASE заавал тохирсон байх)
 const backend = process.env.NEXT_PUBLIC_CHAT_API_BASE;
 
-// Backend → Conversion хэлбэр рүү normalize хийх туслах функц
+// Backend → Conversion хэлбэр рүү normalize хийх
 function normalizeConversion(raw: any, idx: number): Conversion {
   return {
     key: String(raw.key ?? raw.code ?? raw.name ?? idx),
     name: String(raw.name ?? raw.code ?? `Item ${idx + 1}`),
-    // value may come from value / qty / total_qty / amount г.м.
     value: Number(
       raw.value ??
         raw.qty ??
@@ -25,7 +23,6 @@ function normalizeConversion(raw: any, idx: number): Conversion {
         raw.total_qty ??
         0,
     ),
-    // ✅ unit-ийг заавал өгөх (backend дээр unit байвал ашиглана, үгүй бол default)
     unit: String(raw.unit ?? "мян. тн"),
   };
 }
@@ -42,36 +39,52 @@ export default function Convertions() {
           return;
         }
 
-        const res = await fetch(`${backend}/dashboard/exchange/timeline`, {
-          cache: "no-store",
-        });
+        const url = `${backend}/dashboard/exchange/timeline`;
+        console.log("Loading exchange timeline from:", url);
+
+        const res = await fetch(url, { cache: "no-store" });
 
         if (!res.ok) {
+          const text = await res.text();
           console.error(
             "Backend error for /dashboard/exchange/timeline",
             res.status,
+            text,
           );
           return;
         }
 
         const json = await res.json();
+        console.log("exchange timeline raw json:", json);
 
         let items: Conversion[] = [];
 
-        // 1) Хэрвээ backend шууд массив буцааж байвал
+        // 1) Шууд массив
         if (Array.isArray(json)) {
           items = json.map((row, i) => normalizeConversion(row, i));
         }
-        // 2) Хэрвээ { items: [...] } хэлбэртэй байвал
+        // 2) { items: [...] }
         else if (Array.isArray(json.items)) {
           items = json.items.map((row: any, i: number) =>
             normalizeConversion(row, i),
           );
         }
-        // 3) Хэрвээ өөр property-д массив байвал (жишээ нь data)
+        // 3) { data: [...] }
         else if (Array.isArray(json.data)) {
           items = json.data.map((row: any, i: number) =>
             normalizeConversion(row, i),
+          );
+        }
+        // 4) Бусад object хэлбэр → value нь массив/объект байвал бүгдийг хөрвүүлнэ
+        else if (typeof json === "object" && json !== null) {
+          const entries = Object.entries(json);
+          items = entries.map(([key, value], i) =>
+            normalizeConversion(
+              typeof value === "object" && value !== null
+                ? { key, ...value }
+                : { key, value },
+              i,
+            ),
           );
         }
 
@@ -114,9 +127,12 @@ function Indicator({
     return <div className="mt-3 text-muted-foreground/60">Ачаалж байна…</div>;
   }
 
-  const total = data.reduce((acc, curr) => acc + (curr.value ?? 0), 0);
+  // Хэрвээ өгөгдөл олдоогүй бол 0 гэж бичихгүй, зүгээр хоосон орхиод доорх "Мэдээлэл алга."-г л харуулна
+  if (!data.length) {
+    return null;
+  }
 
-  // Нэгдсэн unit – ихэнхдээ бүгд адил гэж үзээд эхний element-ээс авъя
+  const total = data.reduce((acc, curr) => acc + (curr.value ?? 0), 0);
   const unit = data[0]?.unit ?? "мян. тн";
 
   return (
@@ -130,7 +146,6 @@ function Indicator({
         </span>
       </div>
 
-      {/* Бүтээгдэхүүн бүрийн тоон дүн */}
       <ul className="space-y-0.5 text-sm text-muted-foreground/80">
         {data.map((item) => (
           <li

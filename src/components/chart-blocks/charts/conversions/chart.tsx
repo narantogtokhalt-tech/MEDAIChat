@@ -1,6 +1,7 @@
 // D:\Projects\visactor-nextjs-template\src\components\chart-blocks\charts\conversions\chart.tsx
 "use client";
 
+import { useMemo } from "react";
 import { VChart } from "@visactor/react-vchart";
 import type { ICirclePackingChartSpec } from "@visactor/vchart";
 import type { Conversion } from "@/data/convertions";
@@ -30,7 +31,7 @@ const buildSpec = (values: Conversion[]): ICirclePackingChartSpec => ({
       visible: (d: any) => d.radius > 30,
       text: (d: any) => {
         if (!d.value) return "";
-        const v = addThousandsSeparator(Math.round(d.value));
+        const v = addThousandsSeparator(Math.round(Number(d.value) || 0));
         return `${v}`;
       },
       fontSize: (d: any) => Math.max(10, d.radius / 3),
@@ -45,7 +46,7 @@ const buildSpec = (values: Conversion[]): ICirclePackingChartSpec => ({
       content: {
         value: (d: any) =>
           `${d?.name}: ${addThousandsSeparator(
-            Math.round(d?.value ?? 0),
+            Math.round(Number(d?.value) || 0),
           )} мян. тн`,
       },
     },
@@ -57,8 +58,17 @@ const buildSpec = (values: Conversion[]): ICirclePackingChartSpec => ({
 });
 
 export default function Chart({ data }: { data: Conversion[] }) {
-  // Хоосон үед ч гэсэн spec-ээ аюулгүй байдлаар үүсгэнэ
   const safeData = Array.isArray(data) ? data : [];
-  const spec = buildSpec(safeData);
+
+  const spec = useMemo(
+    () => buildSpec(safeData),
+    [safeData], // data өөрчлөгдсөн үед л spec дахин үүснэ
+  );
+
+  if (!safeData.length) {
+    // Хэрвээ өгөгдөл алга бол VChart render хийхгүй байж болно (сонголтоор)
+    return null;
+  }
+
   return <VChart spec={spec} />;
 }
