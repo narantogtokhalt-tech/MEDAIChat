@@ -1,33 +1,21 @@
+// D:\Projects\visactor-nextjs-template\src\components\Metrics.tsx
+
 "use client";
 
-import { useEffect, useState } from "react";
 import type { Metric } from "@/data/metrics";
 
-export default function Metrics() {
-  const [metrics, setMetrics] = useState<Metric[] | null>(null);
-  const [loading, setLoading] = useState(true);
+type Props = {
+  metrics: Metric[] | null;
+  loading?: boolean; // optional: server loading.tsx ашиглавал хэрэггүй
+};
 
-  useEffect(() => {
-    async function load() {
-      try {
-        const res = await fetch("/api/metrics");
-        const data = await res.json();
-        setMetrics(data);
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setLoading(false);
-      }
-    }
-    load();
-  }, []);
-
+export default function Metrics({ metrics, loading = false }: Props) {
   if (loading) {
     return <div className="p-4">Түр хүлээнэ үү…</div>;
   }
 
-  if (!metrics) {
-    return <div className="p-4 text-red-500">Metrics ачаалахад алдаа гарлаа.</div>;
+  if (!metrics || metrics.length === 0) {
+    return <div className="p-4 text-muted-foreground">Metrics өгөгдөл алга.</div>;
   }
 
   return (
@@ -44,7 +32,11 @@ export default function Metrics() {
             <div className="text-sm text-muted-foreground">{m.title}</div>
             <div className="text-2xl font-semibold">{m.value}</div>
 
-            <div className={`text-xs font-medium ${isUp ? "text-emerald-500" : "text-red-500"}`}>
+            <div
+              className={`text-xs font-medium ${
+                isUp ? "text-emerald-500" : "text-red-500"
+              }`}
+            >
               {isUp ? "▲" : "▼"} {pct}%
             </div>
           </div>

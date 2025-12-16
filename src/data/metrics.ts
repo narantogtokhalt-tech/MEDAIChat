@@ -50,7 +50,7 @@ export async function getMetrics(): Promise<Metric[]> {
 
   const metrics: Metric[] = [
     {
-      title: "Нийт экспорт",
+      title: "Нийт экспорт (мян $)",
       value: exportValue.toLocaleString("en-US", {
         maximumFractionDigits: 1,
       }),
@@ -58,21 +58,21 @@ export async function getMetrics(): Promise<Metric[]> {
       change: Number(exportYoy) / 100,
     },
     {
-      title: "Нийт импорт",
+      title: "Нийт импорт (мян $)",
       value: importValue.toLocaleString("en-US", {
         maximumFractionDigits: 1,
       }),
       change: Number(importYoy) / 100,
     },
     {
-      title: "Ам.долларын ханш (Sxcoal)",
+      title: "Ам.долларын ханш",
       value: usdRate.toLocaleString("en-US", {
         maximumFractionDigits: 2,
       }),
       change: Number(usdYoy) / 100, // жишээ нь 2.5 → 0.025 → +3% гэж харагдана
     },
     {
-      title: "Юанийн ханш (Sxcoal)",
+      title: "Юанийн ханш",
       value: cnyRate.toLocaleString("en-US", {
         maximumFractionDigits: 2,
       }),

@@ -1,95 +1,70 @@
 // D:\Projects\visactor-nextjs-template\src\components\chart-blocks\charts\conversions\index.tsx
 "use client";
 
-import { useEffect, useState } from "react";
 import { CirclePercent } from "lucide-react";
 import type { Conversion } from "@/data/convertions";
 import { addThousandsSeparator } from "@/lib/utils";
 import ChartTitle from "../../components/chart-title";
 import Chart from "./chart";
 
-const backend = process.env.NEXT_PUBLIC_CHAT_API_BASE;
-
-// Backend JSON-ийн хэлбэр
-type BackendCommodity = {
-  key: string;
-  name: string;
-  total_ton: number;
-  total_scaled: number;
-  unit_scaled: string;
+type Props = {
+  data: Conversion[] | null;
 };
 
-type BackendResponse = {
-  from: string;
-  to: string;
-  commodities: BackendCommodity[];
-};
+/**
+ * Item-ийн value + unit-ийг "сая тн" рүү хөрвүүлнэ.
+ * - "сая" -> хэвээр
+ * - "мян" -> / 1000
+ * - бусад -> fallback (тонн гэж үзээд / 1_000_000)
+ */
+function toMillionTon(value: number, unit: string) {
+  const u = (unit || "").toLowerCase();
+  if (u.includes("сая")) return value;
+  if (u.includes("мян")) return value / 1000;
+  return value / 1_000_000;
+}
 
-export default function Convertions() {
-  const [data, setData] = useState<Conversion[]>([]);
-  const [loading, setLoading] = useState(true);
+// ✅ Chart дээрхтэй ижил өнгөний mapping
+function pickColorByName(name: string) {
+  const n = (name || "").toLowerCase();
 
-  useEffect(() => {
-    async function load() {
-      try {
-        if (!backend) {
-          console.error("NEXT_PUBLIC_CHAT_API_BASE is not set");
-          return;
-        }
+  // - Тод цэнхэр = Жонш
+  // - Бүдэг цэнхэр = Зэсийн баяжмал
+  if (n.includes("жонш")) return "#2563eb"; // vivid blue
+  if (n.includes("зэс")) return "#38bdf8"; // light blue
 
-        const url = `${backend}/dashboard/exchange/timeline`;
-        console.log("Loading exchange timeline from:", url);
+  // Бусад
+  if (n.includes("нүүрс")) return "#f59e0b"; // orange
+  if (n.includes("төмрийн хүдэр, баяжмал")) return "#22c55e"; // gray (төмрийн хүдэр)
 
-        const res = await fetch(url, { cache: "no-store" });
+  return "#94a3b8"; // fallback
+}
 
-        if (!res.ok) {
-          const text = await res.text();
-          console.error(
-            "Backend error for /dashboard/exchange/timeline",
-            res.status,
-            text,
-          );
-          return;
-        }
+function LegendDot({ color }: { color: string }) {
+  return (
+    <span
+      className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
+      style={{ backgroundColor: color }}
+      aria-hidden="true"
+    />
+  );
+}
 
-        const json: BackendResponse = await res.json();
-        console.log("exchange timeline raw json:", json);
-
-        const commodities = json.commodities ?? [];
-
-        // Backend → Conversion[] map
-        const items: Conversion[] = commodities.map((c) => ({
-          key: c.key,
-          name: c.name,
-          // total_scaled = хэмжээг scale хийсэн (сая тн / мян. тн)
-          value: Number.isFinite(c.total_scaled)
-            ? c.total_scaled
-            : 0,
-          // unit_scaled = "сая тн", "мян. тн" гэх мэт
-          unit: c.unit_scaled || "мян. тн",
-        }));
-
-        setData(items);
-      } catch (e) {
-        console.error("Failed to load exchange timeline", e);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    load();
-  }, []);
+export default function Convertions({ data }: Props) {
+  const items = Array.isArray(data) ? data : [];
 
   return (
     <section className="flex h-full flex-col gap-2">
       <ChartTitle title="Биржийн арилжаа (өссөн дүн)" icon={CirclePercent} />
-      <Indicator data={data} loading={loading} />
+
+      <Indicator data={items} />
+
       <div className="relative max-h-80 flex-grow">
-        {data.length > 0 ? (
-          <Chart data={data} />
+        {items.length > 0 ? (
+          <Chart data={items} />
         ) : (
           <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-            {loading ? "Ачаалж байна…" : "Мэдээлэл алга."}
+            Мэдээлэл алга.
           </div>
         )}
       </div>
@@ -97,56 +72,47 @@ export default function Convertions() {
   );
 }
 
-function Indicator({
-  data,
-  loading,
-}: {
-  data: Conversion[];
-  loading: boolean;
-}) {
-  if (loading) {
-    return <div className="mt-3 text-muted-foreground/60">Ачаалж байна…</div>;
-  }
+function Indicator({ data }: { data: Conversion[] }) {
+  if (!data.length) return null;
 
-  if (!data.length) {
-    return null;
-  }
-
-  const total = data.reduce(
-    (acc, curr) =>
-      acc + (Number.isFinite(curr.value) ? curr.value : 0),
-    0,
-  );
-
-  // Энд нэгжийг ерөнхийд нь авъя (ихэнх нь "сая тн" байх)
-  const unit = data[0]?.unit ?? "мян. тн";
+  // ✅ Нийт дүнг "сая тн" рүү normalize хийж бодно
+  const totalMillion = data.reduce((acc, curr) => {
+    const v = Number.isFinite(curr.value) ? Number(curr.value) : 0;
+    const unit = curr.unit ?? "";
+    return acc + toMillionTon(v, unit);
+  }, 0);
 
   return (
     <div className="mt-3 space-y-2">
       <div>
         <span className="mr-1 text-2xl font-medium">
-          {addThousandsSeparator(total)}
+          {addThousandsSeparator(Number(totalMillion.toFixed(2)))}
         </span>
-        <span className="text-muted-foreground/60">
-          {unit} (нийт өссөн дүн)
-        </span>
+        <span className="text-muted-foreground/60">сая тн (нийт)</span>
       </div>
 
-      <ul className="space-y-0.5 text-sm text-muted-foreground/80">
-        {data.map((item) => (
-          <li
-            key={item.key}
-            className="flex items-center justify-between gap-2"
-          >
-            <span>{item.name}</span>
-            <span className="tabular-nums">
-              {addThousandsSeparator(
-                Number.isFinite(item.value) ? item.value : 0,
-              )}{" "}
-              {item.unit}
-            </span>
-          </li>
-        ))}
+      <ul className="space-y-1 text-sm text-muted-foreground/80">
+        {data.map((item) => {
+          const v = Number.isFinite(item.value) ? Number(item.value) : 0;
+          const unit = item.unit ?? "";
+          const color = pickColorByName(item.name);
+
+          return (
+            <li
+              key={item.key}
+              className="flex items-center justify-between gap-3"
+            >
+              <span className="flex items-center gap-2">
+                <LegendDot color={color} />
+                <span>{item.name}</span>
+              </span>
+
+              <span className="tabular-nums">
+                {addThousandsSeparator(Number(v.toFixed(3)))} {unit}
+              </span>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );

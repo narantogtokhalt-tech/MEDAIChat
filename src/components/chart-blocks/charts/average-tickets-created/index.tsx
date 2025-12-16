@@ -1,7 +1,6 @@
-// D:\Projects\visactor-nextjs-template\src\components\chart-blocks\charts\average-tickets-created\index.tsx
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useAtomValue, useSetAtom } from "jotai";
 import { FilePlus2 } from "lucide-react";
 import {
@@ -13,161 +12,161 @@ import type { TicketMetric } from "@/types/types";
 import ChartTitle from "../../components/chart-title";
 import Chart from "./chart";
 import { DatePickerWithRange } from "./components/date-range-picker";
-import MetricCard from "./components/metric-card";
+import SummaryCard, { type SummaryCardItem } from "./card";
 
-// FastAPI backend -ийн base URL (Netlify дээр NEXT_PUBLIC_CHAT_API_BASE заавал тохирсон байх ёстой)
-const backend = process.env.NEXT_PUBLIC_CHAT_API_BASE;
-
-const avgValue = (data: TicketMetric[], type: string) => {
-  const filtered = data.filter((d) => d.type === type);
-  if (filtered.length === 0) return 0;
-  return Math.round(
-    filtered.reduce((acc, x) => acc + x.count, 0) / filtered.length,
-  );
+type Props = {
+  /** Server-side getDashboardData() дээрээс ирэх бэлэн timeline metric */
+  data: TicketMetric[];
 };
 
-export default function AverageTicketsCreated() {
+const COLOR_BY_TYPE: Record<string, string> = {
+  "2601": "#4C7EF3",
+  "2603": "#60C2FB",
+  "2701": "#3161F8",
+  "2709": "#F49C24",
+};
+
+const NAME_BY_TYPE: Record<string, string> = {
+  "2601": "Төмрийн хүдэр, баяжмал",
+  "2603": "Зэсийн баяжмал",
+  "2701": "Нүүрс",
+  "2709": "Газрын тос",
+};
+
+const TYPES = ["2601", "2603", "2701", "2709"] as const;
+
+function sumByType(data: TicketMetric[], type: string): number {
+  return data
+    .filter((d) => String(d.type) === type)
+    .reduce((acc, x) => acc + (Number.isFinite(x.count) ? x.count : 0), 0);
+}
+
+/** Сонгосон dateRange (filter хийсэн ticketChartData) доторх хамгийн сүүлийн сарын утга */
+function getLastValue(data: TicketMetric[], type: string): number {
+  const rows = data.filter((d) => String(d.type) === type);
+  if (!rows.length) return 0;
+
+  rows.sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  const v = Number(rows[rows.length - 1]?.count ?? 0);
+  return Number.isFinite(v) ? v : 0;
+}
+
+function pad2(n: number) {
+  return String(n).padStart(2, "0");
+}
+
+function formatRange(from?: Date, to?: Date) {
+  if (!from || !to) return "—";
+  const f = `${from.getFullYear()}-${pad2(from.getMonth() + 1)}-${pad2(from.getDate())}`;
+  const t = `${to.getFullYear()}-${pad2(to.getMonth() + 1)}-${pad2(to.getDate())}`;
+  return `${f} – ${t}`;
+}
+
+function inferYearMode(from?: Date, to?: Date) {
+  if (!from || !to) return { isYearMode: false, year: null as number | null };
+
+  const sameYear = from.getFullYear() === to.getFullYear();
+  const looksLikeFullYear = from.getMonth() === 0 && to.getMonth() === 11;
+
+  if (sameYear && looksLikeFullYear) {
+    return { isYearMode: true, year: from.getFullYear() };
+  }
+  return { isYearMode: false, year: null as number | null };
+}
+
+export default function AverageTicketsCreated({ data }: Props) {
   const setRawData = useSetAtom(rawTicketDataAtom);
   const setDateRange = useSetAtom(dateRangeAtom);
+
+  // dateRange-тэй уялдсан, шүүлттэй дата (atoms)
   const ticketChartData = useAtomValue(ticketChartDataAtom);
+  const selectedRange = useAtomValue(dateRangeAtom);
 
-  // Backend-с monthly export products timeline ачаална
+  // dateRange-г 1 удаа initialize
+  const didInitRange = useRef(false);
+
   useEffect(() => {
-    async function load() {
-      try {
-        if (!backend) {
-          console.error("NEXT_PUBLIC_CHAT_API_BASE is not set");
-          return;
-        }
+    const metrics = Array.isArray(data) ? data : [];
+    setRawData(metrics);
 
-        // Шууд FastAPI backend рүү дуудах
-        const res = await fetch(
-          `${backend}/dashboard/export/products-timeline`,
-          { cache: "no-store" },
-        );
+    if (!didInitRange.current && metrics.length > 0) {
+      const currentYear = new Date().getFullYear();
 
-        if (!res.ok) {
-          console.error(
-            "Backend error for products-timeline",
-            res.status,
-          );
-          return;
-        }
+      const datesThisYear = metrics
+        .map((d) => new Date(d.date))
+        .filter((d) => d.getFullYear() === currentYear);
 
-        const data = await res.json();
-        // FastAPI-гаас: { products: [...], monthly: [...] }
-        const monthly: any[] = data.monthly ?? [];
-        const productCodes: string[] =
-          data.products?.map((p: any) => p.code) ?? [
-            "2601",
-            "2603",
-            "2701",
-            "2709",
-          ];
+      const targetDates =
+        datesThisYear.length > 0 ? datesThisYear : metrics.map((d) => new Date(d.date));
 
-        // TicketMetric[] => { date, type, count }
-        const metrics: TicketMetric[] = [];
+      if (targetDates.length > 0) {
+        const max = new Date(Math.max(...targetDates.map((d) => d.getTime())));
 
-        for (const row of monthly) {
-          const period =
-            row.period ??
-            `${row.year}-${String(row.month).padStart(2, "0")}`;
-          const date = `${period}-01`; // "2025-11-01" хэлбэр
+        // ✅ Jan 01 –ийг хүчээр тавина (data Feb-с эхэлсэн ч UI дээр Jan 01 гэж харагдана)
+        const y = max.getFullYear();
+        const jan01 = new Date(y, 0, 1);
 
-          for (const code of productCodes) {
-            const value = row[code];
-            if (value == null) continue;
-
-            const num = Number(value);
-            if (!Number.isFinite(num)) continue;
-
-            const rounded = Math.round(num); // бүхэл тоо болгож хадгална
-
-            metrics.push({
-              date,
-              type: code,
-              count: rounded,
-            });
-          }
-        }
-
-        // 1) Бүх timeline-ийг rawTicketDataAtom-д хадгална
-        setRawData(metrics);
-
-        // 2) Default date range → энэ он (metrics дээр)
-        if (metrics.length > 0) {
-          const currentYear = new Date().getFullYear();
-          const datesThisYear = metrics
-            .map((d) => new Date(d.date))
-            .filter((d) => d.getFullYear() === currentYear);
-
-          const targetDates =
-            datesThisYear.length > 0
-              ? datesThisYear
-              : metrics.map((d) => new Date(d.date)); // хэрэв энэ оных байхгүй бол бүх жил
-
-          if (targetDates.length > 0) {
-            const min = new Date(
-              Math.min(...targetDates.map((d) => d.getTime())),
-            );
-            const max = new Date(
-              Math.max(...targetDates.map((d) => d.getTime())),
-            );
-
-            setDateRange({
-              from: min,
-              to: max,
-            });
-          }
-        }
-      } catch (e) {
-        console.error("Failed to load export products timeline", e);
+        setDateRange({ from: jan01, to: max });
+        didInitRange.current = true;
       }
     }
+  }, [data, setRawData, setDateRange]);
 
-    load();
-  }, [setRawData, setDateRange]);
+  // ✅ Card header text: “2025 • Энэ жилийн өссөн дүн” эсвэл “Сонгосон хугацааны өссөн дүн”
+  const { isYearMode, year } = useMemo(
+    () => inferYearMode(selectedRange?.from, selectedRange?.to),
+    [selectedRange?.from, selectedRange?.to],
+  );
 
-  // 4 бүтээгдэхүүн тус бүрийн дундаж (шүүлттэй датаас)
-  const avg2601 = avgValue(ticketChartData, "2601");
-  const avg2603 = avgValue(ticketChartData, "2603");
-  const avg2701 = avgValue(ticketChartData, "2701");
-  const avg2709 = avgValue(ticketChartData, "2709");
+  const cardTitle = isYearMode && year ? `${year}` : null;
+  const cardSubtitle = isYearMode ? "Энэ жилийн өссөн дүн" : "Сонгосон хугацааны өссөн дүн";
+
+  const cardRangeText = useMemo(
+    () => formatRange(selectedRange?.from, selectedRange?.to),
+    [selectedRange?.from, selectedRange?.to],
+  );
+
+  // ✅ Card data: сонгосон range дээрх нийлбэр + хамгийн сүүлийн сар
+  const cardItems = useMemo(() => {
+    const safe = Array.isArray(ticketChartData) ? ticketChartData : [];
+
+    const items: SummaryCardItem[] = TYPES.map((t) => {
+      const total = sumByType(safe, t);
+      const last = getLastValue(safe, t);
+
+      return {
+        type: t,
+        name: NAME_BY_TYPE[t],
+        color: COLOR_BY_TYPE[t],
+        total,
+        last,
+      };
+    });
+
+    // нүүрсийг дээр гаргах (visual priority)
+    items.sort((a, b) => (a.type === "2701" ? -1 : 0) - (b.type === "2701" ? -1 : 0));
+    return items;
+  }, [ticketChartData]);
 
   return (
     <section className="flex h-full flex-col gap-2">
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <ChartTitle
-          title="Экспорт бүтээгдэхүүнээр (сараар)"
-          icon={FilePlus2}
-        />
+        <ChartTitle title="Экспорт бүтээгдэхүүнээр (сараар)" icon={FilePlus2} />
         <DatePickerWithRange />
       </div>
 
-      <div className="flex flex-wrap">
-        <div className="my-4 flex w-72 shrink-0 flex-col gap-6">
-          <MetricCard
-            title="2601 - Төмрийн хүдэр, баяжмал"
-            value={avg2601}
-            color="#4C7EF3"
-          />
-          <MetricCard
-            title="2603 - Зэсийн баяжмал"
-            value={avg2603}
-            color="#60C2FB"
-          />
-          <MetricCard
-            title="2701 - Нүүрс"
-            value={avg2701}
-            color="#3161F8"
-          />
-          <MetricCard
-            title="2709 - Газрын тос"
-            value={avg2709}
-            color="#F49C24"
+      <div className="flex flex-wrap gap-6">
+        {/* ✅ Зүүн талын шилэн summary card */}
+        <div className="my-4 w-72 shrink-0">
+          <SummaryCard
+            titleYear={cardTitle}
+            subtitle={cardSubtitle}
+            rangeText={cardRangeText}
+            items={cardItems}
           />
         </div>
 
+        {/* Chart */}
         <div className="relative h-96 min-w-[320px] flex-1">
           <Chart />
         </div>

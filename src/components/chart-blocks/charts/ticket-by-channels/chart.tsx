@@ -1,171 +1,83 @@
 // D:\Projects\visactor-nextjs-template\src\components\chart-blocks\charts\ticket-by-channels\chart.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { type IPieChartSpec, VChart } from "@visactor/react-vchart";
 import type { Datum } from "@visactor/vchart/esm/typings";
-import { ticketByChannels } from "@/data/ticket-by-channels"; // fallback-д л ашиглана
+import { ticketByChannels } from "@/data/ticket-by-channels"; // fallback
 import { addThousandsSeparator } from "@/lib/utils";
+import type { ProductsValuePieRow } from "@/data/dashboard";
 
-type BackendProduct = {
-  code: string;
-  name: string;
-  unit: string;
+type Props = {
+  pieData: ProductsValuePieRow[];
+  yearLabel: string;
+  exportTotal: number | null;
 };
 
-type BackendYearRow = {
-  year: number;
-  period: string;
-  [code: string]: number | string;
-};
-
-type BackendProductsResp = {
-  products: BackendProduct[];
-  monthly: BackendYearRow[];
-};
-
-type ExportTotal = {
-  date: string;
-  export_this_year: number | null;
-  export_prev_same_day: number | null;
-  yoy_pct: number | null;
-};
+const MILLION = 1;
 
 type PieDataItem = {
-  type: string; // name
-  value: number; // мян ам.доллар (tooltip-доо "мян ам.доллар" гэж харуулж байгаа)
+  type: string;
+  value: number;
 };
 
-const MILLION = 1; // одоогийн backend scale-тайгаа таарч байгаагаар нь хэвээр нь үлдээе
+// ✅ Chart + custom legend ижил өнгө ашиглахын тулд palette тогтооно
+const PALETTE = [
+  "#22c55e", // green
+  "#38bdf8", // light blue
+  "#f59e0b", // orange
+  "#3b82f6", // blue
+  "#a78bfa", // purple
+  "#94a3b8", // gray
+];
 
-// FastAPI backend (Netlify дээр NEXT_PUBLIC_CHAT_API_BASE заавал тохирсон байх)
-const backend = process.env.NEXT_PUBLIC_CHAT_API_BASE;
+export default function Chart({ pieData, yearLabel, exportTotal }: Props) {
+  const effectiveData: PieDataItem[] = useMemo(() => {
+    const fromProps =
+      Array.isArray(pieData) && pieData.length
+        ? pieData
+            .map((x) => ({
+              type: x.name,
+              value: Number(x.value) / MILLION,
+            }))
+            .filter((x) => Number.isFinite(x.value))
+        : [];
 
-export default function Chart() {
-  const [pieData, setPieData] = useState<PieDataItem[] | null>(null);
-  const [yearLabel, setYearLabel] = useState<string | null>(null);
-  const [exportTotalM, setExportTotalM] = useState<number | null>(null);
+    if (fromProps.length) return fromProps;
 
-  // 1) Бүтээгдэхүүн별 үнийн дүн (жилийн нийлбэр)
-  useEffect(() => {
-    async function loadProducts() {
-      try {
-        if (!backend) {
-          console.error("NEXT_PUBLIC_CHAT_API_BASE is not set");
-          return;
-        }
-
-        // Өмнө нь: /api/export/products-value-monthly
-        const res = await fetch(
-          `${backend}/dashboard/export/products-value-monthly`,
-          { cache: "no-store" },
-        );
-
-        if (!res.ok) {
-          console.error(
-            "Backend error for /dashboard/export/products-value-monthly",
-            res.status,
-          );
-          return;
-        }
-
-        const json: BackendProductsResp = await res.json();
-        const products = json.products ?? [];
-        const rows = json.monthly ?? [];
-
-        if (!products.length || !rows.length) return;
-
-        const lastRow = rows[rows.length - 1];
-        const year = String((lastRow as any).year ?? (lastRow as any).period ?? "");
-
-        const items: PieDataItem[] = [];
-        for (const p of products) {
-          const raw = (lastRow as any)[p.code];
-          const num = Number(raw);
-          if (!Number.isFinite(num)) continue;
-
-          const scaled = num / MILLION;
-          items.push({
-            type: p.name,
-            value: scaled,
-          });
-        }
-
-        if (items.length) {
-          setPieData(items);
-          setYearLabel(year);
-        }
-      } catch (e) {
-        console.error("Failed to load products-value-monthly", e);
-      }
-    }
-
-    loadProducts();
-  }, []);
-
-  // 2) Нийт экспортын дүн (энэ жил)
-  useEffect(() => {
-    async function loadTotal() {
-      try {
-        if (!backend) {
-          console.error("NEXT_PUBLIC_CHAT_API_BASE is not set");
-          return;
-        }
-
-        // Өмнө нь: /api/export/total
-        const res = await fetch(
-          `${backend}/dashboard/export/total`,
-          { cache: "no-store" },
-        );
-
-        if (!res.ok) {
-          console.error("Backend error for /dashboard/export/total", res.status);
-          return;
-        }
-
-        const json: ExportTotal = await res.json();
-        const v = json.export_this_year;
-        if (v != null) {
-          setExportTotalM(v / MILLION);
-        }
-      } catch (e) {
-        console.error("Failed to load export total", e);
-      }
-    }
-
-    loadTotal();
-  }, []);
-
-  // Backend байхгүй үед static fallback
-  const effectiveData: PieDataItem[] =
-    pieData ??
-    ticketByChannels.map((x) => ({
+    return ticketByChannels.map((x) => ({
       type: x.type,
       value: x.value,
     }));
+  }, [pieData]);
 
-  // Голд харагдах тоо → нийт экспорт
-  const centerValue =
-    exportTotalM != null
-      ? exportTotalM
-      : effectiveData.reduce((acc, c) => acc + (c.value || 0), 0);
+  const centerValue = useMemo(() => {
+    if (typeof exportTotal === "number" && Number.isFinite(exportTotal)) {
+      return exportTotal / MILLION;
+    }
+    return effectiveData.reduce((acc, c) => acc + (c.value || 0), 0);
+  }, [exportTotal, effectiveData]);
+
+  // ✅ custom legend-д өнгө оноох (chart-ын palette-тай таарна)
+  const legendRows = useMemo(() => {
+    return effectiveData.map((d, i) => ({
+      ...d,
+      color: PALETTE[i % PALETTE.length],
+    }));
+  }, [effectiveData]);
 
   const spec: IPieChartSpec = useMemo(
     () => ({
       type: "pie",
-      legends: [
-        {
-          type: "discrete",
-          visible: true,
-          orient: "bottom",
-        },
-      ],
-      data: [
-        {
-          id: "id0",
-          values: effectiveData,
-        },
-      ],
+      background: "transparent",
+
+      // ✅ built-in legend-ийг унтраана (custom legend ашиглана)
+      legends: [{ visible: false }],
+
+      // ✅ chart palette
+      color: PALETTE,
+
+      data: [{ id: "id0", values: effectiveData }],
       valueField: "value",
       categoryField: "type",
       outerRadius: 1,
@@ -175,39 +87,34 @@ export default function Chart() {
       endAngle: 0,
       centerY: "80%",
       layoutRadius: "auto",
-      pie: {
-        style: {
-          cornerRadius: 6,
-        },
-      },
+
+      pie: { style: { cornerRadius: 6 } },
+
       tooltip: {
         trigger: ["click", "hover"],
         mark: {
-          title: {
-            visible: false,
-          },
+          title: { visible: false },
           content: [
             {
-              key: (datum: Datum | undefined) => datum?.type,
+              key: (datum: Datum | undefined) => (datum as any)?.type,
               value: (datum: Datum | undefined) =>
-                datum?.value != null
+                (datum as any)?.value != null
                   ? `${addThousandsSeparator(
-                      Number((datum.value as number).toFixed(1)),
+                      Number(Number((datum as any).value).toFixed(1)),
                     )} мян ам.доллар`
                   : "",
             },
           ],
         },
       },
+
       indicator: [
         {
           visible: true,
-          offsetY: "40%",
+          offsetY: "20%",
           title: {
             style: {
-              text: yearLabel
-                ? `Экспорт (үнийн дүн,мян $)`
-                : "Экспорт бүтээгдэхүүн (үнийн дүн)",
+              text: "Нийт экспорт (мян $)",
               fontSize: 14,
               opacity: 0.7,
             },
@@ -215,20 +122,45 @@ export default function Chart() {
         },
         {
           visible: true,
-          offsetY: "64%",
+          offsetY: "60%",
           title: {
             style: {
-              text: `${addThousandsSeparator(
-                Number(centerValue.toFixed(1)),
-              )} `,
+              text: `${addThousandsSeparator(Number(centerValue.toFixed(1)))} `,
               fontSize: 26,
             },
           },
         },
       ],
     }),
-    [effectiveData, centerValue, yearLabel],
+    [effectiveData, centerValue],
   );
 
-  return <VChart spec={spec} />;
+  return (
+    <div className="h-full w-full bg-transparent">
+      {/* 2 багана: Chart | Legend */}
+      <div className="grid h-full w-full grid-cols-1 gap-4 bg-transparent laptop:grid-cols-[1fr_220px]">
+        <div className="h-full w-full bg-transparent [&_canvas]:bg-transparent [&_svg]:bg-transparent">
+          <VChart spec={spec} />
+        </div>
+
+        {/* ✅ Custom legend (өнгө + нэр + утга) */}
+        <div className="flex h-full flex-col justify-center gap-2 pr-2">
+          {legendRows.map((r) => (
+            <div key={r.type} className="flex items-center gap-2 text-sm">
+              <span
+                className="h-2.5 w-2.5 shrink-0 rounded-full"
+                style={{ backgroundColor: r.color }}
+              />
+              <span className="min-w-0 flex-1 truncate text-muted-foreground/90">
+                {r.type}
+              </span>
+              <span className="tabular-nums text-muted-foreground/80">
+                {addThousandsSeparator(Number(r.value.toFixed(1)))}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 }

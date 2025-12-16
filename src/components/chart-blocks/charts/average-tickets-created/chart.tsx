@@ -1,67 +1,63 @@
 // D:\Projects\visactor-nextjs-template\src\components\chart-blocks\charts\average-tickets-created\chart.tsx
 "use client";
 
+import { useMemo } from "react";
 import { useAtomValue } from "jotai";
 import { VChart } from "@visactor/react-vchart";
 import type { IBarChartSpec } from "@visactor/vchart";
 import { ticketChartDataAtom } from "@/lib/atoms";
 import type { TicketMetric } from "@/types/types";
 
-// MetricCard-уудынхаа өнгөтэй тааруулж байна
 const COLOR_BY_TYPE: Record<string, string> = {
-  "2601": "#4C7EF3", // Төмрийн хүдэр, баяжмал
-  "2603": "#60C2FB", // Зэсийн баяжмал
-  "2701": "#3161F8", // Нүүрс
-  "2709": "#F49C24", // Газрын тос
+  "2601": "#4C7EF3",
+  "2603": "#60C2FB",
+  "2701": "#3161F8",
+  "2709": "#F49C24",
 };
 
-const generateSpec = (data: TicketMetric[]): IBarChartSpec => ({
-  type: "bar",
-  data: [
-    {
-      id: "barData",
-      values: data,
+function buildSpec(values: TicketMetric[]): IBarChartSpec {
+  return {
+    type: "bar",
+    background: "transparent",
+    padding: [10, 0, 10, 0],
+
+    data: [{ id: "barData", values }],
+
+    xField: "date",
+    yField: "count",
+    seriesField: "type",
+    stack: false,
+
+    legends: { visible: false },
+
+    tooltip: {
+      trigger: ["hover", "click"],
+      ...( {
+        dimension: { visible: false },
+        crosshair: { visible: false },
+      } as any),
     },
-  ],
-  xField: "date",
-  yField: "count",
-  seriesField: "type",
-  padding: [10, 0, 10, 0],
-  legends: {
-    visible: true, // Хэрэв legend харуулахгүй бол false болгож болно
-  },
-  stack: false,
-  tooltip: {
-    trigger: ["click", "hover"],
-  },
-  bar: {
-    state: {
-      hover: {
-        outerBorder: {
-          distance: 2,
-          lineWidth: 2,
-        },
+
+    bar: {
+      state: { hover: { outerBorder: { distance: 0, lineWidth: 0 } } },
+      style: {
+        cornerRadius: [10, 10, 0, 0],
+        fill: (d: any) => COLOR_BY_TYPE[String(d.type)] ?? "#999999",
       },
     },
-    style: {
-      cornerRadius: [12, 12, 12, 12],
-      // type-ээр нь өнгө сонгоно
-      fill: (datum: any) => {
-        const key = String(datum.type);
-        return COLOR_BY_TYPE[key] ?? "#999999";
-      },
-      // хүсвэл давхардсан баруудын давхаргын дараалал:
-      zIndex: (datum: any) => {
-        const order = ["2601", "2603", "2701", "2709"];
-        const idx = order.indexOf(String(datum.type));
-        return idx === -1 ? 1 : idx + 1;
-      },
-    },
-  },
-});
+  };
+}
 
 export default function Chart() {
   const ticketChartData = useAtomValue(ticketChartDataAtom);
-  const spec = generateSpec(ticketChartData);
-  return <VChart spec={spec} />;
+  const spec = useMemo(
+    () => buildSpec(Array.isArray(ticketChartData) ? ticketChartData : []),
+    [ticketChartData],
+  );
+
+  return (
+    <div className="h-full w-full bg-transparent [&_canvas]:bg-transparent [&_svg]:bg-transparent">
+      <VChart spec={spec} />
+    </div>
+  );
 }

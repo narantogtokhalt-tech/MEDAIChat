@@ -1,7 +1,6 @@
 // D:\Projects\visactor-nextjs-template\src\components\chart-blocks\charts\customer-satisfication\index.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
 import { Flame, TrendingDown, TrendingUp } from "lucide-react";
 import ChartTitle from "../../components/chart-title";
 import { cn } from "@/lib/utils";
@@ -13,50 +12,17 @@ type CoalItem = {
   yoy_pct: number | null;
 };
 
-type CoalResponse = {
+export type CoalResponse = {
   date: string;
   items: CoalItem[];
 };
 
-// FastAPI backend
-const backend = process.env.NEXT_PUBLIC_CHAT_API_BASE;
+type Props = {
+  data: CoalResponse | null;
+};
 
-export default function CustomerSatisfication() {
-  const [data, setData] = useState<CoalResponse | null>(null);
-
-  useEffect(() => {
-    async function load() {
-      try {
-        if (!backend) {
-          console.error("NEXT_PUBLIC_CHAT_API_BASE is not set");
-          return;
-        }
-
-        // ✅ ЭНД ЗӨВ ЭНДПОИНТЫГ АШИГЛАНА
-        const res = await fetch(
-          `${backend}/dashboard/coal-cny/latest`,
-          { cache: "no-store" },
-        );
-
-        if (!res.ok) {
-          console.error(
-            "coal-cny/latest backend error",
-            res.status,
-            res.url,
-          );
-          return;
-        }
-
-        const json: CoalResponse = await res.json();
-        setData(json);
-      } catch (e) {
-        console.error("coal-cny/latest fetch failed", e);
-      }
-    }
-    load();
-  }, []);
-
-  const items = useMemo(() => data?.items ?? [], [data]);
+export default function CustomerSatisfication({ data }: Props) {
+  const items = data?.items ?? [];
 
   return (
     <section className="flex h-full flex-col gap-2">
@@ -64,9 +30,14 @@ export default function CustomerSatisfication() {
       <div className="my-4 flex h-full items-center justify-between">
         <div className="mx-auto grid w-full grid-cols-2 gap-6">
           <Summary date={data?.date} />
-          {items.map((item) => (
-            <PriceRow key={item.name} item={item} />
-          ))}
+
+          {items.length > 0 ? (
+            items.map((item) => <PriceRow key={item.name} item={item} />)
+          ) : (
+            <div className="col-span-2 text-sm text-muted-foreground">
+              Мэдээлэл алга.
+            </div>
+          )}
         </div>
       </div>
     </section>
@@ -105,31 +76,23 @@ function PriceRow({ item }: { item: CoalItem }) {
 
   const latestText =
     item.latest != null
-      ? item.latest.toLocaleString("en-US", {
-          maximumFractionDigits: 0,
-        })
+      ? item.latest.toLocaleString("en-US", { maximumFractionDigits: 0 })
       : "—";
 
-  const yoyText = hasYoy
-    ? `${yoy > 0 ? "+" : ""}${yoy.toFixed(2)}%`
-    : "—";
+  const yoyText = hasYoy ? `${yoy > 0 ? "+" : ""}${yoy.toFixed(2)}%` : "—";
 
   return (
     <div className="flex flex-col gap-1">
       <div className="text-xs text-muted-foreground">{item.name}</div>
       <div className="flex items-center justify-between gap-4">
-        {/* Сүүлийн үнэ */}
         <div className="flex flex-col">
           <span className="text-lg font-semibold">{latestText}</span>
           <span className="text-[11px] text-muted-foreground"></span>
         </div>
 
-        {/* YoY хувь */}
         <div className="flex items-center gap-2">
           <Icon className={cn("h-5 w-5", colorClass)} />
-          <span className={cn("text-lg font-semibold", colorClass)}>
-            {yoyText}
-          </span>
+          <span className={cn("text-lg font-semibold", colorClass)}>{yoyText}</span>
         </div>
       </div>
     </div>
