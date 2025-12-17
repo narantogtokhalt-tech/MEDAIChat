@@ -32,9 +32,7 @@ export type DashboardData = {
 };
 
 const BASE =
-  process.env.NEXT_PUBLIC_CHAT_API_BASE ||
-  process.env.NEXT_PUBLIC_API_BASE_URL ||
-  "";
+  process.env.NEXT_PUBLIC_CHAT_API_BASE || "";
 
 /**
  * ✅ Dashboard data чинь секунд тутам өөрчлөгдөх шаардлагагүй бол
