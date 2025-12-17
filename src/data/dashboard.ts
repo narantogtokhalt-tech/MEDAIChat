@@ -34,8 +34,8 @@ const BASE = process.env.NEXT_PUBLIC_CHAT_API_BASE || "";
 
 // ---- perf knobs ----
 const IS_PROD = process.env.NODE_ENV === "production";
-const FETCH_TIMEOUT_MS = IS_PROD ? 15_000 : 15_000; // backend удаан тул 15s
-const FETCH_RETRY = IS_PROD ? 0 : 1;
+const FETCH_TIMEOUT_MS = 30_000;
+const FETCH_RETRY = 0;
 
 function join(base: string, path: string) {
   if (!base) return path;
