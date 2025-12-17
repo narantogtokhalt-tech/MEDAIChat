@@ -16,26 +16,25 @@ export type ProductsValuePieRow = {
 export type DashboardData = {
   metrics: Metric[] | null;
 
-  // AverageTicketsCreated
   productsMonthly: TicketMetric[];
 
-  // TicketByChannels
   productsValuePie: ProductsValuePieRow[];
   productsValueYearLabel: string;
   productsValueExportTotal: number | null;
 
-  // Conversions
   exchangeTimeline: Conversion[] | null;
 
-  // CustomerSatisfication
   coalLatest: CoalResponse | null;
+
+  // ⛳ debug үед л нэмэгдэнэ
+  __debug?: any;
 };
 
 const BASE = process.env.NEXT_PUBLIC_CHAT_API_BASE || "";
 
 // ---- perf knobs ----
 const IS_PROD = process.env.NODE_ENV === "production";
-const FETCH_TIMEOUT_MS = IS_PROD ? 12_000 : 15_000; // backend удаан байгааг бодоод 12s
+const FETCH_TIMEOUT_MS = IS_PROD ? 15_000 : 15_000; // backend удаан тул 15s
 const FETCH_RETRY = IS_PROD ? 0 : 1;
 
 function join(base: string, path: string) {
@@ -65,17 +64,14 @@ async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: numbe
   const t = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const res = await fetch(url, { ...init, signal: controller.signal });
-    return res;
+    return await fetch(url, { ...init, signal: controller.signal });
   } finally {
     clearTimeout(t);
   }
 }
 
 /**
- * ✅ IMPORTANT:
- * External API (stats-chatbot) руу хийх fetch дээр Next-ийн force-cache/next.revalidate ашиглахгүй.
- * Cache/ISR-г зөвхөн /api/dashboard route дээр нэг л давхарга болгон шийдсэн.
+ * External API руу -> no-store (Next cache ашиглахгүй)
  */
 async function fetchJSON<T>(
   path: string,
@@ -102,6 +98,7 @@ async function fetchJSON<T>(
         throw new Error(`Fetch failed ${res.status} ${url} :: ${text.slice(0, 200)}`);
       }
 
+      // ⚠️ json parse энд унаж байж болно — debug-д reason гарна
       return (await res.json()) as T;
     } catch (err) {
       lastErr = err;
@@ -113,15 +110,10 @@ async function fetchJSON<T>(
   throw lastErr instanceof Error ? lastErr : new Error(`Fetch failed ${url}`);
 }
 
-// ---- Backend response types (local) ----
+// ---- Backend response types ----
 type ProductsTimelineResp = {
   products?: Array<{ code: string; name?: string; unit?: string }>;
-  monthly?: Array<{
-    year?: number;
-    month?: number;
-    period?: string;
-    [code: string]: any;
-  }>;
+  monthly?: Array<{ year?: number; month?: number; period?: string; [code: string]: any }>;
 };
 
 type ExportTotalResp = {
@@ -142,14 +134,12 @@ type ProductsValueMonthlyResp =
     };
 
 type ExchangeTimelineResp = {
-  from?: string;
-  to?: string;
   commodities?: Array<{
     key: string;
     name: string;
     total_ton: number | string;
     total_scaled: number | string;
-    unit_scaled: string; // "сая тн" / "мян. тн" гэх мэт
+    unit_scaled: string;
   }>;
 };
 
@@ -179,7 +169,6 @@ function buildProductsMonthly(json: ProductsTimelineResp): TicketMetric[] {
     for (const code of productCodes) {
       const num = toNum((row as any)[code]);
       if (num == null) continue;
-
       metrics.push({ date, type: code, count: Math.round(num) });
     }
   }
@@ -187,13 +176,8 @@ function buildProductsMonthly(json: ProductsTimelineResp): TicketMetric[] {
   return metrics;
 }
 
-function buildProductsValuePie(v: ProductsValueMonthlyResp): {
-  pie: ProductsValuePieRow[];
-  yearLabel: string;
-} {
-  if (Array.isArray(v)) {
-    return { pie: v, yearLabel: "" };
-  }
+function buildProductsValuePie(v: ProductsValueMonthlyResp): { pie: ProductsValuePieRow[]; yearLabel: string } {
+  if (Array.isArray(v)) return { pie: v, yearLabel: "" };
 
   const products = v.products ?? [];
   const rows = v.monthly ?? [];
@@ -201,9 +185,7 @@ function buildProductsValuePie(v: ProductsValueMonthlyResp): {
 
   const yearLabel = v.yearLabel ?? String(lastRow?.year ?? lastRow?.period ?? "") ?? "";
 
-  if (Array.isArray(v.data)) {
-    return { pie: v.data, yearLabel };
-  }
+  if (Array.isArray(v.data)) return { pie: v.data, yearLabel };
 
   if (products.length && lastRow) {
     const items: ProductsValuePieRow[] = [];
@@ -223,8 +205,7 @@ function buildExchangeTimeline(resp: ExchangeTimelineResp): Conversion[] {
 
   const bases = commodities.map((c) => {
     const scaled = toNum(c.total_scaled) ?? 0;
-    const unit = c.unit_scaled || "тн";
-    return toTons(scaled, unit);
+    return toTons(scaled, c.unit_scaled || "тн");
   });
 
   const totalBase = bases.reduce((a, b) => a + b, 0);
@@ -249,7 +230,10 @@ function buildExchangeTimeline(resp: ExchangeTimelineResp): Conversion[] {
   });
 }
 
-export async function getDashboardData(): Promise<DashboardData> {
+/**
+ * ✅ debug=true үед fulfilled/rejected reason-уудыг __debug дээр харуулна
+ */
+export async function getDashboardData(debug = false): Promise<DashboardData> {
   const empty: DashboardData = {
     metrics: null,
     productsMonthly: [],
@@ -260,16 +244,11 @@ export async function getDashboardData(): Promise<DashboardData> {
     coalLatest: null,
   };
 
-  if (!BASE) return empty;
+  if (!BASE) return { ...empty, ...(debug ? { __debug: { baseMissing: true } } : {}) };
 
-  const [
-    metricsR,
-    productsTimelineR,
-    productsValueMonthlyR,
-    exportTotalR,
-    exchangeTimelineR,
-    coalLatestR,
-  ] = await Promise.allSettled([
+  const startedAt = Date.now();
+
+  const tasks = await Promise.allSettled([
     getMetrics(),
     fetchJSON<ProductsTimelineResp>("/dashboard/export/products-timeline"),
     fetchJSON<ProductsValueMonthlyResp>("/dashboard/export/products-value-monthly"),
@@ -278,32 +257,66 @@ export async function getDashboardData(): Promise<DashboardData> {
     fetchJSON<CoalResponse>("/dashboard/coal-cny/latest"),
   ]);
 
+  const [metricsR, productsTimelineR, productsValueMonthlyR, exportTotalR, exchangeTimelineR, coalLatestR] =
+    tasks as [
+      PromiseSettledResult<any>,
+      PromiseSettledResult<any>,
+      PromiseSettledResult<any>,
+      PromiseSettledResult<any>,
+      PromiseSettledResult<any>,
+      PromiseSettledResult<any>
+    ];
+
   const out: DashboardData = { ...empty };
 
-  if (metricsR.status === "fulfilled" && Array.isArray(metricsR.value)) {
-    out.metrics = metricsR.value;
-  }
-
-  if (productsTimelineR.status === "fulfilled") {
-    out.productsMonthly = buildProductsMonthly(productsTimelineR.value);
-  }
-
+  if (metricsR.status === "fulfilled" && Array.isArray(metricsR.value)) out.metrics = metricsR.value;
+  if (productsTimelineR.status === "fulfilled") out.productsMonthly = buildProductsMonthly(productsTimelineR.value);
   if (productsValueMonthlyR.status === "fulfilled") {
     const { pie, yearLabel } = buildProductsValuePie(productsValueMonthlyR.value);
     out.productsValuePie = pie;
     out.productsValueYearLabel = yearLabel;
   }
+  if (exportTotalR.status === "fulfilled") out.productsValueExportTotal = toNum(exportTotalR.value.export_this_year);
+  if (exchangeTimelineR.status === "fulfilled") out.exchangeTimeline = buildExchangeTimeline(exchangeTimelineR.value);
+  if (coalLatestR.status === "fulfilled") out.coalLatest = coalLatestR.value;
 
-  if (exportTotalR.status === "fulfilled") {
-    out.productsValueExportTotal = toNum(exportTotalR.value.export_this_year);
-  }
+  if (debug) {
+    const rej: Record<string, string> = {};
+    const ok: Record<string, any> = {};
 
-  if (exchangeTimelineR.status === "fulfilled") {
-    out.exchangeTimeline = buildExchangeTimeline(exchangeTimelineR.value);
-  }
+    function pick(label: string, r: PromiseSettledResult<any>) {
+      if (r.status === "rejected") {
+        rej[label] = (r.reason && (r.reason.message ?? String(r.reason))) ?? "rejected";
+      } else {
+        const v = r.value;
+        ok[label] = {
+          type: typeof v,
+          keys: v && typeof v === "object" ? Object.keys(v).slice(0, 20) : null,
+          sample:
+            label === "productsTimeline"
+              ? { monthlyLen: v?.monthly?.length ?? null, firstRow: v?.monthly?.[0] ?? null }
+              : label === "productsValueMonthly"
+              ? { isArray: Array.isArray(v), monthlyLen: v?.monthly?.length ?? null, firstRow: v?.monthly?.[0] ?? null }
+              : label === "exchangeTimeline"
+              ? { commoditiesLen: v?.commodities?.length ?? null, first: v?.commodities?.[0] ?? null }
+              : null,
+        };
+      }
+    }
 
-  if (coalLatestR.status === "fulfilled") {
-    out.coalLatest = coalLatestR.value;
+    pick("metrics", metricsR);
+    pick("productsTimeline", productsTimelineR);
+    pick("productsValueMonthly", productsValueMonthlyR);
+    pick("exportTotal", exportTotalR);
+    pick("exchangeTimeline", exchangeTimelineR);
+    pick("coalLatest", coalLatestR);
+
+    out.__debug = {
+      base: BASE,
+      msTotal: Date.now() - startedAt,
+      ok,
+      rej,
+    };
   }
 
   return out;
