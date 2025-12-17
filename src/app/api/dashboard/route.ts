@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { getDashboardData } from "@/data/dashboard";
 
 // ISR (route-level)
-export const revalidate = 60;
+export const revalidate = 0;
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
