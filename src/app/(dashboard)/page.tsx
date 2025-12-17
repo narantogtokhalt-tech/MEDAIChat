@@ -1,11 +1,10 @@
 // src/app/(dashboard)/page.tsx
 
 import { Suspense } from "react";
-import { headers } from "next/headers";
 
 import ChatbotWidget from "@/components/ChatbotWidget";
 import { Metrics } from "@/components/chart-blocks";
-import type { DashboardData } from "@/data/dashboard";
+import { getDashboardData, type DashboardData } from "@/data/dashboard";
 import DashboardChartsClient from "./charts.client";
 
 export const revalidate = 60;
@@ -20,33 +19,23 @@ function SectionSkeleton({ title }: { title: string }) {
   );
 }
 
+function SectionError({ title, message }: { title: string; message: string }) {
+  return (
+    <div className="rounded-xl border border-destructive/40 bg-destructive/5 p-4">
+      <div className="mb-2 text-sm font-medium">{title}</div>
+      <div className="text-xs text-muted-foreground break-words">{message}</div>
+    </div>
+  );
+}
+
 /**
- * ✅ Next.js 16: headers() нь async → await заавал
- * ✅ Absolute URL ашиглана
- * ✅ Promise share хэвээр
+ * ✅ API route руу absolute URL-ээр буцааж fetch хийхгүй
+ * ✅ Server-side дээрээс шууд getDashboardData() дуудна (найдвартай)
+ * ✅ Promise share хэвээр (1 л удаа fetch)
  */
 async function getDashboardPromise(): Promise<DashboardData> {
-  const h = await headers();
-
-  const host = h.get("host"); // localhost:3000
-  const proto = h.get("x-forwarded-proto") ?? "http";
-
-  if (!host) {
-    throw new Error("Missing host header; cannot build absolute URL");
-  }
-
-  const url = `${proto}://${host}/api/dashboard`;
-
-  const res = await fetch(url, {
-    next: { revalidate: 60 },
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`GET ${url} failed ${res.status}: ${text.slice(0, 200)}`);
-  }
-
-  return (await res.json()) as DashboardData;
+  // debug-г эндээс асаах шаардлагагүй. /api/dashboard?debug=1-г зөвхөн шалгалтад ашиглана.
+  return await getDashboardData({ debug: false });
 }
 
 async function MetricsBlock({ p }: { p: Promise<DashboardData> }) {
@@ -70,22 +59,41 @@ async function ChartsBlock({ p }: { p: Promise<DashboardData> }) {
 }
 
 export default function Home() {
-  // ✅ promise share — 1 л удаа
   const dashboardPromise = getDashboardPromise();
 
   return (
     <>
-      <div>
+      <div className="space-y-4">
         <Suspense fallback={<SectionSkeleton title="Loading metrics..." />}>
-          <MetricsBlock p={dashboardPromise} />
+          {/* metrics */}
+          <MetricsSafe p={dashboardPromise} />
         </Suspense>
 
         <Suspense fallback={<SectionSkeleton title="Loading dashboard charts..." />}>
-          <ChartsBlock p={dashboardPromise} />
+          {/* charts */}
+          <ChartsSafe p={dashboardPromise} />
         </Suspense>
       </div>
 
       <ChatbotWidget />
     </>
   );
+}
+
+/** ---- Error-safe wrappers (page цагаан болохоос хамгаална) ---- */
+
+async function MetricsSafe({ p }: { p: Promise<DashboardData> }) {
+  try {
+    return await MetricsBlock({ p });
+  } catch (e: any) {
+    return <SectionError title="Metrics failed" message={e?.message ?? String(e)} />;
+  }
+}
+
+async function ChartsSafe({ p }: { p: Promise<DashboardData> }) {
+  try {
+    return await ChartsBlock({ p });
+  } catch (e: any) {
+    return <SectionError title="Charts failed" message={e?.message ?? String(e)} />;
+  }
 }
