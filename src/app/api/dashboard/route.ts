@@ -2,11 +2,11 @@
 import { NextResponse } from "next/server";
 import { getDashboardData } from "@/data/dashboard";
 
-// Vercel runtime hints
+// Vercel runtime hints (удаан backend-тэй үед хэрэгтэй)
 export const runtime = "nodejs";
-export const maxDuration = 45;
+export const maxDuration = 30;
 
-// Route-level ISR
+// ✅ Route-level ISR (cache-г энд л хийж байна)
 export const revalidate = 60;
 
 const BASE = process.env.NEXT_PUBLIC_CHAT_API_BASE || "";
@@ -21,7 +21,7 @@ export async function GET(req: Request) {
     return NextResponse.json(debug ? { base: BASE, ...data } : data, {
       headers: {
         "x-dashboard": "ok",
-        // CDN cache + stale while revalidate
+        // Vercel CDN cache
         "cache-control": "s-maxage=60, stale-while-revalidate=300",
       },
     });
@@ -36,6 +36,7 @@ export async function GET(req: Request) {
         status: 500,
         headers: {
           "x-dashboard": "fail",
+          // алдааг cache-лахгүй
           "cache-control": "no-store",
         },
       }

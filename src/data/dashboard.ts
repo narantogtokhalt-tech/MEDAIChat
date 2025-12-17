@@ -35,8 +35,7 @@ const BASE = process.env.NEXT_PUBLIC_CHAT_API_BASE || "";
 
 // ---- perf knobs ----
 const IS_PROD = process.env.NODE_ENV === "production";
-const REVALIDATE_SECONDS = 60;
-const FETCH_TIMEOUT_MS = IS_PROD ? 3500 : 10_000; // ✅ Vercel timeout-оос хамгаална
+const FETCH_TIMEOUT_MS = IS_PROD ? 12_000 : 15_000; // backend удаан байгааг бодоод 12s
 const FETCH_RETRY = IS_PROD ? 0 : 1;
 
 function join(base: string, path: string) {
@@ -73,20 +72,23 @@ async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: numbe
   }
 }
 
+/**
+ * ✅ IMPORTANT:
+ * External API (stats-chatbot) руу хийх fetch дээр Next-ийн force-cache/next.revalidate ашиглахгүй.
+ * Cache/ISR-г зөвхөн /api/dashboard route дээр нэг л давхарга болгон шийдсэн.
+ */
 async function fetchJSON<T>(
   path: string,
-  opts?: { revalidate?: number; timeoutMs?: number; retry?: number }
+  opts?: { timeoutMs?: number; retry?: number }
 ): Promise<T> {
   const url = join(BASE, path);
 
-  const revalidate = opts?.revalidate ?? REVALIDATE_SECONDS;
   const timeoutMs = opts?.timeoutMs ?? FETCH_TIMEOUT_MS;
   const retry = opts?.retry ?? FETCH_RETRY;
 
   const init: RequestInit = {
     method: "GET",
-    cache: revalidate > 0 ? "force-cache" : "no-store",
-    next: revalidate > 0 ? { revalidate } : undefined,
+    cache: "no-store",
   };
 
   let lastErr: unknown = null;
@@ -147,7 +149,7 @@ type ExchangeTimelineResp = {
     name: string;
     total_ton: number | string;
     total_scaled: number | string;
-    unit_scaled: string;
+    unit_scaled: string; // "сая тн" / "мян. тн" гэх мэт
   }>;
 };
 
@@ -239,10 +241,8 @@ function buildExchangeTimeline(resp: ExchangeTimelineResp): Conversion[] {
       name: c.name,
       value: scaled,
       unit,
-
       size: share,
       share,
-
       displayValue: scaled,
       displayUnit: unit,
     } as any;
@@ -275,7 +275,7 @@ export async function getDashboardData(): Promise<DashboardData> {
     fetchJSON<ProductsValueMonthlyResp>("/dashboard/export/products-value-monthly"),
     fetchJSON<ExportTotalResp>("/dashboard/export/total"),
     fetchJSON<ExchangeTimelineResp>("/dashboard/exchange/timeline"),
-    fetchJSON<CoalResponse>("/dashboard/coal-cny/latest", { revalidate: 30 }),
+    fetchJSON<CoalResponse>("/dashboard/coal-cny/latest"),
   ]);
 
   const out: DashboardData = { ...empty };
