@@ -31,16 +31,13 @@ export type DashboardData = {
   coalLatest: CoalResponse | null;
 };
 
-const BASE =
-  process.env.NEXT_PUBLIC_CHAT_API_BASE || "";
+const BASE = process.env.NEXT_PUBLIC_CHAT_API_BASE || "";
 
-/**
- * ✅ Dashboard data чинь секунд тутам өөрчлөгдөх шаардлагагүй бол
- * revalidate-тай (ISR cache) fetch ашиглах нь анхны render-ийг маш их хурдлуулна.
- */
-const REVALIDATE_SECONDS = 60; // 30, 60, 300 гэх мэтээр тохируулж болно
-const FETCH_TIMEOUT_MS = 10_000; // удаан endpoint дээр 25 сек түгжихээс хамгаална
-const FETCH_RETRY = 1; // 0 эсвэл 1 байхад хангалттай
+// ---- perf knobs ----
+const IS_PROD = process.env.NODE_ENV === "production";
+const REVALIDATE_SECONDS = 60;
+const FETCH_TIMEOUT_MS = IS_PROD ? 3500 : 10_000; // ✅ Vercel timeout-оос хамгаална
+const FETCH_RETRY = IS_PROD ? 0 : 1;
 
 function join(base: string, path: string) {
   if (!base) return path;
@@ -49,6 +46,19 @@ function join(base: string, path: string) {
 
 function isAbortError(err: unknown) {
   return err instanceof Error && err.name === "AbortError";
+}
+
+// ✅ "14,671.7" / "3 544.81" -> 14671.7 / 3544.81
+function toNum(v: any): number | null {
+  if (typeof v === "number") return Number.isFinite(v) ? v : null;
+  if (typeof v === "string") {
+    const s0 = v.trim();
+    if (!s0) return null;
+    const s = s0.replace(/\s+/g, "").replace(/,/g, "");
+    const n = Number(s);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
 }
 
 async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number) {
@@ -63,7 +73,10 @@ async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: numbe
   }
 }
 
-async function fetchJSON<T>(path: string, opts?: { revalidate?: number; timeoutMs?: number; retry?: number }): Promise<T> {
+async function fetchJSON<T>(
+  path: string,
+  opts?: { revalidate?: number; timeoutMs?: number; retry?: number }
+): Promise<T> {
   const url = join(BASE, path);
 
   const revalidate = opts?.revalidate ?? REVALIDATE_SECONDS;
@@ -72,11 +85,6 @@ async function fetchJSON<T>(path: string, opts?: { revalidate?: number; timeoutM
 
   const init: RequestInit = {
     method: "GET",
-    /**
-     * ✅ Next.js App Router дээр:
-     * - cache: "force-cache" + next.revalidate => ISR cache ажиллана
-     * - cache: "no-store" => бүр SSR бүр дээр дахин татна (удаан)
-     */
     cache: revalidate > 0 ? "force-cache" : "no-store",
     next: revalidate > 0 ? { revalidate } : undefined,
   };
@@ -95,8 +103,6 @@ async function fetchJSON<T>(path: string, opts?: { revalidate?: number; timeoutM
       return (await res.json()) as T;
     } catch (err) {
       lastErr = err;
-
-      // timeout/abort дээр нэг удаа retry хийхэд их нэмэртэй
       const shouldRetry = attempt < retry && (isAbortError(err) || err instanceof TypeError);
       if (!shouldRetry) break;
     }
@@ -118,9 +124,9 @@ type ProductsTimelineResp = {
 
 type ExportTotalResp = {
   date: string;
-  export_this_year: number | null;
-  export_prev_same_day: number | null;
-  yoy_pct: number | null;
+  export_this_year: number | string | null;
+  export_prev_same_day: number | string | null;
+  yoy_pct: number | string | null;
 };
 
 type ProductsValueMonthlyResp =
@@ -129,7 +135,7 @@ type ProductsValueMonthlyResp =
       products?: Array<{ code: string; name: string; unit?: string }>;
       monthly?: Array<{ year?: number; period?: string; [code: string]: any }>;
       yearLabel?: string;
-      exportTotal?: number;
+      exportTotal?: number | string;
       data?: ProductsValuePieRow[];
     };
 
@@ -139,9 +145,9 @@ type ExchangeTimelineResp = {
   commodities?: Array<{
     key: string;
     name: string;
-    total_ton: number;
-    total_scaled: number;
-    unit_scaled: string; // "сая тн" / "мян. тн" гэх мэт
+    total_ton: number | string;
+    total_scaled: number | string;
+    unit_scaled: string;
   }>;
 };
 
@@ -154,8 +160,7 @@ function toTons(totalScaled: number, unitScaled: string) {
 
 function buildProductsMonthly(json: ProductsTimelineResp): TicketMetric[] {
   const monthly = json.monthly ?? [];
-  const productCodes =
-    json.products?.map((p) => p.code) ?? ["2601", "2603", "2701", "2709"];
+  const productCodes = json.products?.map((p) => p.code) ?? ["2601", "2603", "2701", "2709"];
 
   const metrics: TicketMetric[] = [];
 
@@ -170,9 +175,8 @@ function buildProductsMonthly(json: ProductsTimelineResp): TicketMetric[] {
     const date = `${period}-01`;
 
     for (const code of productCodes) {
-      const raw = (row as any)[code];
-      const num = Number(raw);
-      if (!Number.isFinite(num)) continue;
+      const num = toNum((row as any)[code]);
+      if (num == null) continue;
 
       metrics.push({ date, type: code, count: Math.round(num) });
     }
@@ -193,8 +197,7 @@ function buildProductsValuePie(v: ProductsValueMonthlyResp): {
   const rows = v.monthly ?? [];
   const lastRow = rows.length ? rows[rows.length - 1] : null;
 
-  const yearLabel =
-    v.yearLabel ?? String(lastRow?.year ?? lastRow?.period ?? "") ?? "";
+  const yearLabel = v.yearLabel ?? String(lastRow?.year ?? lastRow?.period ?? "") ?? "";
 
   if (Array.isArray(v.data)) {
     return { pie: v.data, yearLabel };
@@ -203,8 +206,8 @@ function buildProductsValuePie(v: ProductsValueMonthlyResp): {
   if (products.length && lastRow) {
     const items: ProductsValuePieRow[] = [];
     for (const p of products) {
-      const num = Number((lastRow as any)[p.code]);
-      if (!Number.isFinite(num)) continue;
+      const num = toNum((lastRow as any)[p.code]);
+      if (num == null) continue;
       items.push({ name: p.name, value: num });
     }
     return { pie: items, yearLabel };
@@ -217,7 +220,7 @@ function buildExchangeTimeline(resp: ExchangeTimelineResp): Conversion[] {
   const commodities = resp.commodities ?? [];
 
   const bases = commodities.map((c) => {
-    const scaled = Number.isFinite(c.total_scaled) ? c.total_scaled : 0;
+    const scaled = toNum(c.total_scaled) ?? 0;
     const unit = c.unit_scaled || "тн";
     return toTons(scaled, unit);
   });
@@ -225,22 +228,23 @@ function buildExchangeTimeline(resp: ExchangeTimelineResp): Conversion[] {
   const totalBase = bases.reduce((a, b) => a + b, 0);
 
   return commodities.map((c, i) => {
+    const scaled = toNum(c.total_scaled) ?? 0;
+    const unit = c.unit_scaled || "тн";
+
     const baseTon = bases[i] ?? 0;
     const share = totalBase > 0 ? baseTon / totalBase : 0;
 
     return {
       key: c.key,
       name: c.name,
-      value: Number.isFinite(c.total_scaled) ? c.total_scaled : 0,
-      unit: c.unit_scaled || "тн",
+      value: scaled,
+      unit,
 
-      // bubble sizing
       size: share,
       share,
 
-      // tooltip display
-      displayValue: Number.isFinite(c.total_scaled) ? c.total_scaled : 0,
-      displayUnit: c.unit_scaled || "тн",
+      displayValue: scaled,
+      displayUnit: unit,
     } as any;
   });
 }
@@ -258,10 +262,6 @@ export async function getDashboardData(): Promise<DashboardData> {
 
   if (!BASE) return empty;
 
-  /**
-   * ✅ Parallel + each endpoint timeout/retry + ISR cache
-   * Promise.allSettled ашигласнаар 1 endpoint унасан ч dashboard бүхэлдээ унахгүй.
-   */
   const [
     metricsR,
     productsTimelineR,
@@ -270,45 +270,38 @@ export async function getDashboardData(): Promise<DashboardData> {
     exchangeTimelineR,
     coalLatestR,
   ] = await Promise.allSettled([
-    getMetrics(), // боломжтой бол getMetrics доторх fetch дээр ч revalidate тавиарай
+    getMetrics(),
     fetchJSON<ProductsTimelineResp>("/dashboard/export/products-timeline"),
     fetchJSON<ProductsValueMonthlyResp>("/dashboard/export/products-value-monthly"),
     fetchJSON<ExportTotalResp>("/dashboard/export/total"),
     fetchJSON<ExchangeTimelineResp>("/dashboard/exchange/timeline"),
-    fetchJSON<CoalResponse>("/dashboard/coal-cny/latest", { revalidate: 30 }), // нүүрс ойр ойрхон шинэчлэгддэг бол бага болго
+    fetchJSON<CoalResponse>("/dashboard/coal-cny/latest", { revalidate: 30 }),
   ]);
 
   const out: DashboardData = { ...empty };
 
-  // ---- metrics ----
   if (metricsR.status === "fulfilled" && Array.isArray(metricsR.value)) {
     out.metrics = metricsR.value;
   }
 
-  // ---- AverageTicketsCreated ----
   if (productsTimelineR.status === "fulfilled") {
     out.productsMonthly = buildProductsMonthly(productsTimelineR.value);
   }
 
-  // ---- TicketByChannels ----
   if (productsValueMonthlyR.status === "fulfilled") {
     const { pie, yearLabel } = buildProductsValuePie(productsValueMonthlyR.value);
     out.productsValuePie = pie;
     out.productsValueYearLabel = yearLabel;
   }
 
-  // ---- export total ----
   if (exportTotalR.status === "fulfilled") {
-    const v = exportTotalR.value.export_this_year;
-    out.productsValueExportTotal = typeof v === "number" ? v : null;
+    out.productsValueExportTotal = toNum(exportTotalR.value.export_this_year);
   }
 
-  // ---- Conversions ----
   if (exchangeTimelineR.status === "fulfilled") {
     out.exchangeTimeline = buildExchangeTimeline(exchangeTimelineR.value);
   }
 
-  // ---- Coal latest ----
   if (coalLatestR.status === "fulfilled") {
     out.coalLatest = coalLatestR.value;
   }

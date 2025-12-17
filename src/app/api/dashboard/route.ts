@@ -1,18 +1,16 @@
-// src/app/api/dashboard/route.ts
 import { NextResponse } from "next/server";
 import { getDashboardData } from "@/data/dashboard";
 
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
+// ISR
+export const revalidate = 60;
 
-export async function GET(req: Request) {
+export async function GET() {
   try {
     const data = await getDashboardData();
-
     return NextResponse.json(data, {
       headers: {
-        "cache-control": "no-store",
         "x-dashboard": "ok",
+        "cache-control": "s-maxage=60, stale-while-revalidate=300",
       },
     });
   } catch (err: any) {
