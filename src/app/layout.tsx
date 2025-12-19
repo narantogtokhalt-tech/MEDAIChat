@@ -4,7 +4,7 @@ import { SideNav } from "@/components/nav";
 import { siteConfig } from "@/config/site";
 import { cn } from "@/lib/utils";
 import "@/style/globals.css";
-import { Providers } from "./providers";
+import Providers from "@/components/Providers";
 
 const gabarito = Gabarito({ subsets: ["latin"], variable: "--font-gabarito" });
 

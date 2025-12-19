@@ -7,6 +7,7 @@ import type { Datum } from "@visactor/vchart/esm/typings";
 import { ticketByChannels } from "@/data/ticket-by-channels"; // fallback
 import { addThousandsSeparator } from "@/lib/utils";
 import type { ProductsValuePieRow } from "@/data/dashboard";
+import { useTheme } from "next-themes"; // ✅ нэмэв
 
 type Props = {
   pieData: ProductsValuePieRow[];
@@ -32,6 +33,19 @@ const PALETTE = [
 ];
 
 export default function Chart({ pieData, yearLabel, exportTotal }: Props) {
+  // ✅ theme toggle-оос хамаарах өнгө
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme === "dark";
+
+  // ✅ indicator текстийн өнгөнүүд
+  const indicatorLabelColor = isDark
+    ? "rgba(226,232,240,0.75)" // dark дээр цайвар
+    : "rgba(15,23,42,0.65)"; // light дээр бараан
+
+  const indicatorValueColor = isDark
+    ? "rgba(226,232,240,0.95)"
+    : "rgba(15,23,42,0.92)";
+
   const effectiveData: PieDataItem[] = useMemo(() => {
     const fromProps =
       Array.isArray(pieData) && pieData.length
@@ -108,6 +122,7 @@ export default function Chart({ pieData, yearLabel, exportTotal }: Props) {
         },
       },
 
+      // ✅ indicator text өнгийг theme-ээр удирдана
       indicator: [
         {
           visible: true,
@@ -116,7 +131,7 @@ export default function Chart({ pieData, yearLabel, exportTotal }: Props) {
             style: {
               text: "Нийт экспорт (мян $)",
               fontSize: 14,
-              opacity: 0.7,
+              fill: indicatorLabelColor, // ✅ нэмэв
             },
           },
         },
@@ -127,12 +142,15 @@ export default function Chart({ pieData, yearLabel, exportTotal }: Props) {
             style: {
               text: `${addThousandsSeparator(Number(centerValue.toFixed(1)))} `,
               fontSize: 26,
+              fontWeight: 700,
+              fill: indicatorValueColor, // ✅ нэмэв
             },
           },
         },
       ],
     }),
-    [effectiveData, centerValue],
+    // ✅ isDark өөрчлөгдвөл spec шинэчлэгдэнэ
+    [effectiveData, centerValue, indicatorLabelColor, indicatorValueColor],
   );
 
   return (
