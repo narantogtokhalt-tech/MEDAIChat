@@ -1,72 +1,64 @@
-// src/app/api/admin/users/[id]/route.ts
+// src/app/api/admin/[id]/route.ts
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 
-const BACKEND_URL = process.env.BACKEND_URL || "http://127.0.0.1:8010";
-const BACKEND_API_KEY = process.env.BACKEND_API_KEY || "secret123";
+const CHAT_API_BASE =
+  process.env.NEXT_PUBLIC_CHAT_API_BASE || "http://127.0.0.1:8010";
 
-async function requireAdmin() {
-  const session = await getServerSession(authOptions);
-  const role = (session?.user as any)?.role;
-  const accessToken = (session as any)?.accessToken as string | null;
+// ❗Эдгээрийг Frontend repo дээр бол NEXT_PUBLIC биш, server-only env байлгах нь зөв.
+// Vercel дээр Environment Variables-д нэмээрэй.
+const BACKEND_API_KEY = process.env.BACKEND_API_KEY || process.env.NEXT_PUBLIC_BACKEND_API_KEY || "secret123";
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN || process.env.NEXT_PUBLIC_ADMIN_TOKEN || "dev-admin-token";
 
-  if (!session) return { ok: false as const, status: 401, msg: "Unauthorized" };
-  if (role !== "admin") return { ok: false as const, status: 403, msg: "Admin only" };
-  if (!accessToken)
-    return { ok: false as const, status: 401, msg: "Missing access token" };
+type Ctx = { params: Promise<{ id: string }> };
 
-  return { ok: true as const, accessToken };
+function backendHeaders() {
+  return {
+    "Content-Type": "application/json",
+    "x-api-key": BACKEND_API_KEY,
+    Authorization: `Bearer ${ADMIN_TOKEN}`,
+  };
 }
 
-export async function PATCH(
-  req: Request,
-  { params }: { params: { id: string } }
-) {
-  const a = await requireAdmin();
-  if (!a.ok) return NextResponse.json({ detail: a.msg }, { status: a.status });
+export async function PATCH(req: Request, context: Ctx) {
+  try {
+    const { id } = await context.params;
+    const body = await req.json().catch(() => ({}));
 
-  const body = await req.text();
+    const url = `${CHAT_API_BASE}/auth/users/${encodeURIComponent(id)}`;
+    const res = await fetch(url, {
+      method: "PATCH",
+      headers: backendHeaders(),
+      body: JSON.stringify(body),
+      cache: "no-store",
+    });
 
-  const r = await fetch(`${BACKEND_URL}/auth/users/${encodeURIComponent(params.id)}`, {
-    method: "PATCH",
-    headers: {
-      "content-type": "application/json",
-      "x-api-key": BACKEND_API_KEY,
-      Authorization: `Bearer ${a.accessToken}`,
-    },
-    body,
-  });
-
-  const text = await r.text();
-  return new NextResponse(text, {
-    status: r.status,
-    headers: {
-      "content-type": r.headers.get("content-type") || "application/json",
-    },
-  });
+    const text = await res.text();
+    return new NextResponse(text, { status: res.status });
+  } catch (e: any) {
+    return NextResponse.json(
+      { detail: e?.message ?? "Proxy PATCH failed" },
+      { status: 500 },
+    );
+  }
 }
 
-export async function DELETE(
-  _req: Request,
-  { params }: { params: { id: string } }
-) {
-  const a = await requireAdmin();
-  if (!a.ok) return NextResponse.json({ detail: a.msg }, { status: a.status });
+export async function DELETE(_req: Request, context: Ctx) {
+  try {
+    const { id } = await context.params;
 
-  const r = await fetch(`${BACKEND_URL}/auth/users/${encodeURIComponent(params.id)}`, {
-    method: "DELETE",
-    headers: {
-      "x-api-key": BACKEND_API_KEY,
-      Authorization: `Bearer ${a.accessToken}`,
-    },
-  });
+    const url = `${CHAT_API_BASE}/auth/users/${encodeURIComponent(id)}`;
+    const res = await fetch(url, {
+      method: "DELETE",
+      headers: backendHeaders(),
+      cache: "no-store",
+    });
 
-  const text = await r.text();
-  return new NextResponse(text, {
-    status: r.status,
-    headers: {
-      "content-type": r.headers.get("content-type") || "application/json",
-    },
-  });
+    const text = await res.text();
+    return new NextResponse(text, { status: res.status });
+  } catch (e: any) {
+    return NextResponse.json(
+      { detail: e?.message ?? "Proxy DELETE failed" },
+      { status: 500 },
+    );
+  }
 }
